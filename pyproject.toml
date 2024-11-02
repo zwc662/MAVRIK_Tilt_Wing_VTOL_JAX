@@ -1,15 +1,16 @@
 [tool.poetry]
-name = "mavrik-jax"
+name = "jax-mavrik"
 version = "0.1.0"
 description = "A JAX re-implementation of the MAVRIK Matlab simulator"
 authors = ["zwc662 <zwc662@gmail.com>"]
 readme = "README.md"
-packages = [{include = "mavrik_jax"}]
+packages = [{include = "jax_mavrik"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
 jax = "0.4.31"
 pytest = "^8.3.3"
+diffrax = "^0.6.0"
 
 
 [build-system]

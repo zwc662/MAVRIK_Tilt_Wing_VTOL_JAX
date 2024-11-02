@@ -12,6 +12,42 @@ files = [
 ]
 
 [[package]]
+name = "diffrax"
+version = "0.6.0"
+description = "GPU+autodiff-capable ODE/SDE/CDE solvers written in JAX."
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "diffrax-0.6.0-py3-none-any.whl", hash = "sha256:7a59a796fd91e9c1cb20c37696c9f758681a3f24e72ff354a5a6aa335d3cde3a"},
+    {file = "diffrax-0.6.0.tar.gz", hash = "sha256:937207070bd7fdfe99178e23ec1787a630df7e3969b381e072ca6a14f5e2f3d3"},
+]
+
+[package.dependencies]
+equinox = ">=0.11.2"
+jax = ">=0.4.28"
+jaxtyping = ">=0.2.24"
+lineax = ">=0.0.5"
+optimistix = ">=0.0.7"
+typeguard = "2.13.3"
+typing-extensions = ">=4.5.0"
+
+[[package]]
+name = "equinox"
+version = "0.11.8"
+description = "Elegant easy-to-use neural networks in JAX."
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "equinox-0.11.8-py3-none-any.whl", hash = "sha256:552292b473956693e8e8973bdae9b58aaec54fd48e192921beb82995e3a9c995"},
+    {file = "equinox-0.11.8.tar.gz", hash = "sha256:d1e91a05e41bb9538db72a8e15d26daf958348c26714533434c88c5ec0c0b0ef"},
+]
+
+[package.dependencies]
+jax = ">=0.4.13,<0.4.27 || >0.4.27"
+jaxtyping = ">=0.2.20"
+typing-extensions = ">=4.5.0"
+
+[[package]]
 name = "exceptiongroup"
 version = "1.2.2"
 description = "Backport of PEP 654 (exception groups)"
@@ -100,6 +136,37 @@ scipy = [
     {version = ">=1.11.1", markers = "python_version >= \"3.12\""},
     {version = ">=1.10", markers = "python_version < \"3.12\""},
 ]
+
+[[package]]
+name = "jaxtyping"
+version = "0.2.34"
+description = "Type annotations and runtime checking for shape and dtype of JAX arrays, and PyTrees."
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "jaxtyping-0.2.34-py3-none-any.whl", hash = "sha256:2f81fb6d1586e497a6ea2d28c06dcab37b108a096cbb36ea3fe4fa2e1c1f32e5"},
+    {file = "jaxtyping-0.2.34.tar.gz", hash = "sha256:eed9a3458ec8726c84ea5457ebde53c964f65d2c22c0ec40d0555ae3fed5bbaf"},
+]
+
+[package.dependencies]
+typeguard = "2.13.3"
+
+[[package]]
+name = "lineax"
+version = "0.0.7"
+description = "Linear solvers in JAX and Equinox."
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "lineax-0.0.7-py3-none-any.whl", hash = "sha256:c261977fd2104010ff34b7353deef22961da3ca46f341f158567dc2bbb8c2372"},
+    {file = "lineax-0.0.7.tar.gz", hash = "sha256:e43549a8d202432d4668afe54866741a0214ccb363487bacb2a980f72840ea48"},
+]
+
+[package.dependencies]
+equinox = ">=0.11.5"
+jax = ">=0.4.26"
+jaxtyping = ">=0.2.20"
+typing-extensions = ">=4.5.0"
 
 [[package]]
 name = "ml-dtypes"
@@ -216,6 +283,24 @@ files = [
 ]
 
 [[package]]
+name = "optimistix"
+version = "0.0.9"
+description = "Nonlinear optimisation in JAX and Equinox."
+optional = false
+python-versions = "~=3.9"
+files = [
+    {file = "optimistix-0.0.9-py3-none-any.whl", hash = "sha256:d47d47ef520a4c4e37ff050c89793401cb7142009ef917a986bdc55f9d5db2aa"},
+    {file = "optimistix-0.0.9.tar.gz", hash = "sha256:b5e3ce9e6d111f399269c7565c68125bdf6bae9b8ff6cacf30232231159354ef"},
+]
+
+[package.dependencies]
+equinox = ">=0.11.7"
+jax = ">=0.4.28"
+jaxtyping = ">=0.2.23"
+lineax = ">=0.0.6"
+typing-extensions = ">=4.5.0"
+
+[[package]]
 name = "packaging"
 version = "24.1"
 description = "Core utilities for Python packages"
@@ -324,7 +409,33 @@ files = [
     {file = "tomli-2.0.2.tar.gz", hash = "sha256:d46d457a85337051c36524bc5349dd91b1877838e2979ac5ced3e710ed8a60ed"},
 ]
 
+[[package]]
+name = "typeguard"
+version = "2.13.3"
+description = "Run-time type checker for Python"
+optional = false
+python-versions = ">=3.5.3"
+files = [
+    {file = "typeguard-2.13.3-py3-none-any.whl", hash = "sha256:5e3e3be01e887e7eafae5af63d1f36c849aaa94e3a0112097312aabfa16284f1"},
+    {file = "typeguard-2.13.3.tar.gz", hash = "sha256:00edaa8da3a133674796cf5ea87d9f4b4c367d77476e185e80251cc13dfbb8c4"},
+]
+
+[package.extras]
+doc = ["sphinx-autodoc-typehints (>=1.2.0)", "sphinx-rtd-theme"]
+test = ["mypy", "pytest", "typing-extensions"]
+
+[[package]]
+name = "typing-extensions"
+version = "4.12.2"
+description = "Backported and Experimental Type Hints for Python 3.8+"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "typing_extensions-4.12.2-py3-none-any.whl", hash = "sha256:04e5ca0351e0f3f85c6853954072df659d0d13fac324d0072316b67d7794700d"},
+    {file = "typing_extensions-4.12.2.tar.gz", hash = "sha256:1a7ead55c7e559dd4dee8856e3a88b41225abfe1ce8df57b7c13915fe121ffb8"},
+]
+
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "1dc976b7221e0a1084c08ad19052ed166d8257dfd55e18637892678cefc6f360"
+content-hash = "b572bddbf95ec1afdd629bdca0e0ebd86aa17e5b95bafaa70dff27b426e95919"
