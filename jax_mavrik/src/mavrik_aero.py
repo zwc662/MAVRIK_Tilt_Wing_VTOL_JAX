@@ -10,7 +10,7 @@ import jax.numpy as jnp
 from jax import jit
 from jax import vmap
 
-from typing import Tuple, List, Float
+from typing import Tuple, List
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs
 from jax_mavrik.mavrik_setup import MavrikSetup
 
@@ -19,64 +19,64 @@ from jax_mavrik.mavrik_setup import MavrikSetup
 def linear_interpolate(v0, v1, weight):
     return v0 * (1 - weight) + v1 * weight
 
+def get_index_and_weight(value, breakpoints):
+    """
+    Finds the index and weight for interpolation along a single dimension.
+    """
+    idx = jnp.clip(jnp.searchsorted(breakpoints, value) - 1, 0, len(breakpoints) - 2)
+    weight = (value - breakpoints[idx]) / (breakpoints[idx + 1] - breakpoints[idx])
+    return idx, weight
+
+def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: jnp.ndarray) -> float:
+    """
+    Perform n-dimensional interpolation using vectorized JAX operations.
+
+    Args:
+        inputs (jnp.ndarray): The input coordinates at which to interpolate.
+        breakpoints (list of jnp.ndarray): Each array contains the breakpoints for one dimension.
+        values (jnp.ndarray): The values at each grid point with shape matching the breakpoints.
+
+    Returns:
+        jnp.ndarray: Interpolated value.
+    """
+    ndim = len(breakpoints)
+    indices = []
+    weights = []
+
+    # Loop over each dimension instead of using vmap
+    for i in range(ndim):
+        idx, weight = get_index_and_weight(inputs[i], breakpoints[i])
+        indices.append(idx)
+        weights.append(weight)
+
+    indices = jnp.array(indices)
+    weights = jnp.array(weights)
+
+    # Generate corner indices for interpolation
+    corner_indices = jnp.stack(jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"), axis=-1).reshape(-1, ndim)
+
+    # Function to compute interpolated values for each corner
+    def compute_corner_value(corner):
+        corner_idx = indices + corner
+        corner_value = values[tuple(corner_idx)]
+        corner_weight = jnp.prod(jnp.where(corner, weights, 1 - weights))
+        return corner_value * corner_weight
+
+    # Vectorize computation across all corners
+    interpolated_values = vmap(compute_corner_value)(corner_indices)
+
+    # Sum contributions from all corners
+    return jnp.sum(interpolated_values)
 
 class JaxNDInterpolator:
     def __init__(self, breakpoints: List[jnp.ndarray], values: jnp.ndarray):
-        """
-        Initialize the n-D interpolator.
-
-        Args:
-            breakpoints (list of jnp.ndarray): Each array contains the breakpoints for one dimension.
-            values (jnp.ndarray): The values at each grid point with shape matching the breakpoints.
-        """
         self.breakpoints = breakpoints
         self.values = values
-        self.ndim = len(breakpoints)  # Number of dimensions
 
-    def __call__(self, inputs: jnp.ndarray) -> Float:
-        """
-        Perform n-dimensional interpolation using vectorized JAX operations.
-
-        Args:
-            inputs (jnp.ndarray): The input coordinates at which to interpolate.
-
-        Returns:
-            jnp.ndarray: Interpolated value.
-        """
-        indices = []
-        weights = []
-
-        # For each dimension, calculate the index and interpolation weight
-        for i in range(self.ndim):
-            bp = self.breakpoints[i]
-            value = inputs[i]
-            
-            # Find the interval in breakpoints where the input value lies
-            idx = jnp.clip(jnp.searchsorted(bp, value) - 1, 0, len(bp) - 2)
-            weight = (value - bp[idx]) / (bp[idx + 1] - bp[idx])
-
-            indices.append(idx)
-            weights.append(weight)
-
-        # Generate all corner combinations for interpolation
-        corner_indices = jnp.array(jnp.meshgrid(*[[0, 1]] * self.ndim, indexing="ij")).reshape(self.ndim, -1).T
-
-        # Gather values from each corner of the interpolation "hypercube"
-        interpolated_value = 0.0
-        for corner in corner_indices:
-            corner_idx = [indices[dim] + corner[dim] for dim in range(self.ndim)]
-            corner_value = self.values[tuple(corner_idx)]
-            
-            # Compute the weight for this corner
-            corner_weight = jnp.prod(
-                [weights[dim] if corner[dim] else (1 - weights[dim]) for dim in range(self.ndim)]
-            )
-            
-            # Accumulate weighted value
-            interpolated_value += corner_value * corner_weight
-
-        return interpolated_value
-    
+    def __call__(self, inputs: jnp.ndarray) -> float:
+        # Use partial to create a JAX-compatible function with fixed breakpoints and values
+        interpolator = ft.partial(interpolate_nd, breakpoints=self.breakpoints, values=self.values)
+        return interpolator(inputs)
 
 class MavrikAero:
     def __init__(self, mass: float, mavrik_setup: MavrikSetup):
@@ -91,10 +91,7 @@ class MavrikAero:
             beta = jnp.arctan2(state.Vy, jnp.sqrt(state.Vx**2 + state.Vz**2)),
             p = state.wx,
             q = state.wy,
-            r = state.wz,
-            phi = state.roll,
-            theta = state.pitch,
-            psi = state.yaw
+            r = state.wz
         ) 
 
         actuator_inputs = ActuatorInput(
@@ -148,7 +145,7 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos( u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
-        CX_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CX_aileron_wing_{i}') for i in range(7)]
+        CX_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CX_aileron_wing_{i}') for i in range(1, 1 + 7)]
         CX_aileron_wing_value = self.mavrik_setup.CX_aileron_wing_()
         CX_aileron_wing_lookup_table = JaxNDInterpolator(CX_aileron_wing_breakpoints, CX_aileron_wing_value)
         CX_aileron_wing = CX_aileron_wing_lookup_table(jnp.array([
@@ -156,7 +153,7 @@ class MavrikAero:
         ]))
         CX_aileron_wing_padded = jnp.array([CX_aileron_wing, 0.0, 0.0])
         CX_aileron_wing_padded_transformed = jnp.dot(wing_transform, CX_aileron_wing_padded * CX_Scale)
-        CX_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'CX_elevator_tail_{i}') for i in range(7)]
+        CX_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'CX_elevator_tail_{i}') for i in range(1, 1 + 7)]
         CX_elevator_tail_value = self.mavrik_setup.CX_elevator_tail_val
         CX_elevator_tail_lookup_table = JaxNDInterpolator(CX_elevator_tail_breakpoints, CX_elevator_tail_value)
         CX_elevator_tail = CX_elevator_tail_lookup_table(jnp.array([
@@ -165,7 +162,7 @@ class MavrikAero:
         CX_elevator_tail_padded = jnp.array([CX_elevator_tail, 0.0, 0.0])
         CX_elevator_tail_padded_transformed = jnp.dot(tail_transform, CX_elevator_tail_padded * CX_Scale)
 
-        CX_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'CX_flap_wing_{i}') for i in range(7)]
+        CX_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'CX_flap_wing_{i}') for i in range(1, 1 + 7)]
         CX_flap_wing_value = self.mavrik_setup.CX_flap_wing_val
         CX_flap_wing_lookup_table = JaxNDInterpolator(CX_flap_wing_breakpoints, CX_flap_wing_value)
         CX_flap_wing = CX_flap_wing_lookup_table(jnp.array([
@@ -174,7 +171,7 @@ class MavrikAero:
         CX_flap_wing_padded = jnp.array([CX_flap_wing, 0.0, 0.0])
         CX_flap_wing_padded_transformed = jnp.dot(wing_transform, CX_flap_wing_padded * CX_Scale)
 
-        CX_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'CX_rudder_tail_{i}') for i in range(7)]
+        CX_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'CX_rudder_tail_{i}') for i in range(1, 1 + 7)]
         CX_rudder_tail_value = self.mavrik_setup.CX_rudder_tail_val
         CX_rudder_tail_lookup_table = JaxNDInterpolator(CX_rudder_tail_breakpoints, CX_rudder_tail_value)
         CX_rudder_tail = CX_rudder_tail_lookup_table(jnp.array([
@@ -184,7 +181,7 @@ class MavrikAero:
         CX_rudder_tail_padded_transformed = jnp.dot(tail_transform, CX_rudder_tail_padded * CX_Scale)
 
         # Tail
-        CX_tail_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_{i}') for i in range(6)]
+        CX_tail_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_{i}') for i in range(1, 1 + 6)]
         CX_tail_value = self.mavrik_setup.CX_tail_val
         CX_tail_lookup_table = JaxNDInterpolator(CX_tail_breakpoints, CX_tail_value)
         CX_tail = CX_tail_lookup_table(jnp.array([
@@ -194,7 +191,7 @@ class MavrikAero:
         CX_tail_padded_transformed = jnp.dot(tail_transform, CX_tail_padded * CX_Scale)
 
         # Tail Damp p
-        CX_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_damp_p_{i}') for i in range(6)]
+        CX_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_damp_p_{i}') for i in range(1, 1 + 6)]
         CX_tail_damp_p_value = self.mavrik_setup.CX_tail_damp_p_val
         CX_tail_damp_p_lookup_table = JaxNDInterpolator(CX_tail_damp_p_breakpoints, CX_tail_damp_p_value)
         CX_tail_damp_p = CX_tail_damp_p_lookup_table(jnp.array([
@@ -204,7 +201,7 @@ class MavrikAero:
         CX_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CX_tail_damp_p_padded * CX_Scale_p)
 
         # Tail Damp q
-        CX_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_damp_q_{i}') for i in range(6)]
+        CX_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_damp_q_{i}') for i in range(1, 1 + 6)]
         CX_tail_damp_q_value = self.mavrik_setup.CX_tail_damp_q_val
         CX_tail_damp_q_lookup_table = JaxNDInterpolator(CX_tail_damp_q_breakpoints, CX_tail_damp_q_value)
         CX_tail_damp_q = CX_tail_damp_q_lookup_table(jnp.array([
@@ -214,7 +211,7 @@ class MavrikAero:
         CX_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CX_tail_damp_q_padded * CX_Scale_q)
 
         # Tail Damp r
-        CX_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_damp_r_{i}') for i in range(6)]
+        CX_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CX_tail_damp_r_{i}') for i in range(1, 1 + 6)]
         CX_tail_damp_r_value = self.mavrik_setup.CX_tail_damp_r_val
         CX_tail_damp_r_lookup_table = JaxNDInterpolator(CX_tail_damp_r_breakpoints, CX_tail_damp_r_value)
         CX_tail_damp_r = CX_tail_damp_r_lookup_table(jnp.array([
@@ -224,7 +221,7 @@ class MavrikAero:
         CX_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CX_tail_damp_r_padded * CX_Scale_r)
 
         # Wing
-        CX_wing_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_{i}') for i in range(6)]
+        CX_wing_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_{i}') for i in range(1, 1 + 6)]
         CX_wing_value = self.mavrik_setup.CX_wing_val
         CX_wing_lookup_table = JaxNDInterpolator(CX_wing_breakpoints, CX_wing_value)
         CX_wing = CX_wing_lookup_table(jnp.array([
@@ -234,7 +231,7 @@ class MavrikAero:
         CX_wing_padded_transformed = jnp.dot(wing_transform, CX_wing_padded * CX_Scale)
 
         # Wing Damp p
-        CX_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_damp_p_{i}') for i in range(6)]
+        CX_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_damp_p_{i}') for i in range(1, 1 + 6)]
         CX_wing_damp_p_value = self.mavrik_setup.CX_wing_damp_p_val
         CX_wing_damp_p_lookup_table = JaxNDInterpolator(CX_wing_damp_p_breakpoints, CX_wing_damp_p_value)
         CX_wing_damp_p = CX_wing_damp_p_lookup_table(jnp.array([
@@ -244,7 +241,7 @@ class MavrikAero:
         CX_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CX_wing_damp_p_padded * CX_Scale_p)
 
         # Wing Damp q
-        CX_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_damp_q_{i}') for i in range(6)]
+        CX_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_damp_q_{i}') for i in range(1, 1 + 6)]
         CX_wing_damp_q_value = self.mavrik_setup.CX_wing_damp_q_val
         CX_wing_damp_q_lookup_table = JaxNDInterpolator(CX_wing_damp_q_breakpoints, CX_wing_damp_q_value)
         CX_wing_damp_q = CX_wing_damp_q_lookup_table(jnp.array([
@@ -254,7 +251,7 @@ class MavrikAero:
         CX_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CX_wing_damp_q_padded * CX_Scale_q)
 
         # Wing Damp r
-        CX_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_damp_r_{i}') for i in range(6)]
+        CX_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CX_wing_damp_r_{i}') for i in range(1, 1 + 6)]
         CX_wing_damp_r_value = self.mavrik_setup.CX_wing_damp_r_val
         CX_wing_damp_r_lookup_table = JaxNDInterpolator(CX_wing_damp_r_breakpoints, CX_wing_damp_r_value)
         CX_wing_damp_r = CX_wing_damp_r_lookup_table(jnp.array([
@@ -264,7 +261,7 @@ class MavrikAero:
         CX_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CX_wing_damp_r_padded * CX_Scale_r)
 
         # Hover Fuse
-        CX_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'CX_hover_fuse_{i}') for i in range(3)]
+        CX_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'CX_hover_fuse_{i}') for i in range(1, 1 + 3)]
         CX_hover_fuse_value = self.mavrik_setup.CX_hover_fuse_val
         CX_hover_fuse_lookup_table = JaxNDInterpolator(CX_hover_fuse_breakpoints, CX_hover_fuse_value)
         CX_hover_fuse = CX_hover_fuse_lookup_table(jnp.array([
@@ -295,7 +292,7 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
-        CY_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CY_aileron_wing_{i}') for i in range(7)]
+        CY_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CY_aileron_wing_{i}') for i in range(1, 1 + 7)]
         CY_aileron_wing_value = self.mavrik_setup.CY_aileron_wing_()
         CY_aileron_wing_lookup_table = JaxNDInterpolator(CY_aileron_wing_breakpoints, CY_aileron_wing_value)
         CY_aileron_wing = CY_aileron_wing_lookup_table(jnp.array([
@@ -303,7 +300,7 @@ class MavrikAero:
         ]))
         CY_aileron_wing_padded = jnp.array([0.0, CY_aileron_wing, 0.0])
         CY_aileron_wing_padded_transformed = jnp.dot(wing_transform, CY_aileron_wing_padded * CY_Scale)
-        CY_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'CY_elevator_tail_{i}') for i in range(7)]
+        CY_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'CY_elevator_tail_{i}') for i in range(1, 1 + 7)]
         CY_elevator_tail_value = self.mavrik_setup.CY_elevator_tail_val
         CY_elevator_tail_lookup_table = JaxNDInterpolator(CY_elevator_tail_breakpoints, CY_elevator_tail_value)
         CY_elevator_tail = CY_elevator_tail_lookup_table(jnp.array([
@@ -312,7 +309,7 @@ class MavrikAero:
         CY_elevator_tail_padded = jnp.array([0.0, CY_elevator_tail, 0.0])
         CY_elevator_tail_padded_transformed = jnp.dot(tail_transform, CY_elevator_tail_padded * CY_Scale)
 
-        CY_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'CY_flap_wing_{i}') for i in range(7)]
+        CY_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'CY_flap_wing_{i}') for i in range(1, 1 + 7)]
         CY_flap_wing_value = self.mavrik_setup.CY_flap_wing_val
         CY_flap_wing_lookup_table = JaxNDInterpolator(CY_flap_wing_breakpoints, CY_flap_wing_value)
         CY_flap_wing = CY_flap_wing_lookup_table(jnp.array([
@@ -321,7 +318,7 @@ class MavrikAero:
         CY_flap_wing_padded = jnp.array([0.0, CY_flap_wing, 0.0])
         CY_flap_wing_padded_transformed = jnp.dot(wing_transform, CY_flap_wing_padded * CY_Scale)
 
-        CY_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'CY_rudder_tail_{i}') for i in range(7)]
+        CY_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'CY_rudder_tail_{i}') for i in range(1, 1 + 7)]
         CY_rudder_tail_value = self.mavrik_setup.CY_rudder_tail_val
         CY_rudder_tail_lookup_table = JaxNDInterpolator(CY_rudder_tail_breakpoints, CY_rudder_tail_value)
         CY_rudder_tail = CY_rudder_tail_lookup_table(jnp.array([
@@ -331,7 +328,7 @@ class MavrikAero:
         CY_rudder_tail_padded_transformed = jnp.dot(tail_transform, CY_rudder_tail_padded * CY_Scale)
 
         # Tail
-        CY_tail_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_{i}') for i in range(6)]
+        CY_tail_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_{i}') for i in range(1, 1 + 6)]
         CY_tail_value = self.mavrik_setup.CY_tail_val
         CY_tail_lookup_table = JaxNDInterpolator(CY_tail_breakpoints, CY_tail_value)
         CY_tail = CY_tail_lookup_table(jnp.array([
@@ -341,7 +338,7 @@ class MavrikAero:
         CY_tail_padded_transformed = jnp.dot(tail_transform, CY_tail_padded * CY_Scale)
 
         # Tail Damp p
-        CY_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_damp_p_{i}') for i in range(6)]
+        CY_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_damp_p_{i}') for i in range(1, 1 + 6)]
         CY_tail_damp_p_value = self.mavrik_setup.CY_tail_damp_p_val
         CY_tail_damp_p_lookup_table = JaxNDInterpolator(CY_tail_damp_p_breakpoints, CY_tail_damp_p_value)
         CY_tail_damp_p = CY_tail_damp_p_lookup_table(jnp.array([
@@ -351,7 +348,7 @@ class MavrikAero:
         CY_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_p_padded * CY_Scale_p)
 
         # Tail Damp q
-        CY_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_damp_q_{i}') for i in range(6)]
+        CY_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_damp_q_{i}') for i in range(1, 1 + 6)]
         CY_tail_damp_q_value = self.mavrik_setup.CY_tail_damp_q_val
         CY_tail_damp_q_lookup_table = JaxNDInterpolator(CY_tail_damp_q_breakpoints, CY_tail_damp_q_value)
         CY_tail_damp_q = CY_tail_damp_q_lookup_table(jnp.array([
@@ -361,7 +358,7 @@ class MavrikAero:
         CY_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_q_padded * CY_Scale_q)
 
         # Tail Damp r
-        CY_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_damp_r_{i}') for i in range(6)]
+        CY_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CY_tail_damp_r_{i}') for i in range(1, 1 + 6)]
         CY_tail_damp_r_value = self.mavrik_setup.CY_tail_damp_r_val
         CY_tail_damp_r_lookup_table = JaxNDInterpolator(CY_tail_damp_r_breakpoints, CY_tail_damp_r_value)
         CY_tail_damp_r = CY_tail_damp_r_lookup_table(jnp.array([
@@ -371,7 +368,7 @@ class MavrikAero:
         CY_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_r_padded * CY_Scale_r)
 
         # Wing
-        CY_wing_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_{i}') for i in range(6)]
+        CY_wing_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_{i}') for i in range(1, 1 + 6)]
         CY_wing_value = self.mavrik_setup.CY_wing_val
         CY_wing_lookup_table = JaxNDInterpolator(CY_wing_breakpoints, CY_wing_value)
         CY_wing = CY_wing_lookup_table(jnp.array([
@@ -381,7 +378,7 @@ class MavrikAero:
         CY_wing_padded_transformed = jnp.dot(wing_transform, CY_wing_padded * CY_Scale)
 
         # Wing Damp p
-        CY_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_damp_p_{i}') for i in range(6)]
+        CY_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_damp_p_{i}') for i in range(1, 1 + 6)]
         CY_wing_damp_p_value = self.mavrik_setup.CY_wing_damp_p_val
         CY_wing_damp_p_lookup_table = JaxNDInterpolator(CY_wing_damp_p_breakpoints, CY_wing_damp_p_value)
         CY_wing_damp_p = CY_wing_damp_p_lookup_table(jnp.array([
@@ -391,7 +388,7 @@ class MavrikAero:
         CY_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_p_padded * CY_Scale_p)
 
         # Wing Damp q
-        CY_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_damp_q_{i}') for i in range(6)]
+        CY_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_damp_q_{i}') for i in range(1, 1 + 6)]
         CY_wing_damp_q_value = self.mavrik_setup.CY_wing_damp_q_val
         CY_wing_damp_q_lookup_table = JaxNDInterpolator(CY_wing_damp_q_breakpoints, CY_wing_damp_q_value)
         CY_wing_damp_q = CY_wing_damp_q_lookup_table(jnp.array([
@@ -401,7 +398,7 @@ class MavrikAero:
         CY_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_q_padded * CY_Scale_q)
 
         # Wing Damp r
-        CY_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_damp_r_{i}') for i in range(6)]
+        CY_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CY_wing_damp_r_{i}') for i in range(1, 1 + 6)]
         CY_wing_damp_r_value = self.mavrik_setup.CY_wing_damp_r_val
         CY_wing_damp_r_lookup_table = JaxNDInterpolator(CY_wing_damp_r_breakpoints, CY_wing_damp_r_value)
         CY_wing_damp_r = CY_wing_damp_r_lookup_table(jnp.array([
@@ -411,7 +408,7 @@ class MavrikAero:
         CY_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_r_padded * CY_Scale_r)
 
         # Hover Fuse
-        CY_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'CY_hover_fuse_{i}') for i in range(3)]
+        CY_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'CY_hover_fuse_{i}') for i in range(1, 1 + 3)]
         CY_hover_fuse_value = self.mavrik_setup.CY_hover_fuse_val
         CY_hover_fuse_lookup_table = JaxNDInterpolator(CY_hover_fuse_breakpoints, CY_hover_fuse_value)
         CY_hover_fuse = CY_hover_fuse_lookup_table(jnp.array([
@@ -443,7 +440,7 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
-        CZ_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CZ_aileron_wing_{i}') for i in range(7)]
+        CZ_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CZ_aileron_wing_{i}') for i in range(1, 1 + 7)]
         CZ_aileron_wing_value = self.mavrik_setup.CZ_aileron_wing_()
         CZ_aileron_wing_lookup_table = JaxNDInterpolator(CZ_aileron_wing_breakpoints, CZ_aileron_wing_value)
         CZ_aileron_wing = CZ_aileron_wing_lookup_table(jnp.array([
@@ -452,7 +449,7 @@ class MavrikAero:
         CZ_aileron_wing_padded = jnp.array([0.0, 0.0, CZ_aileron_wing])
         CZ_aileron_wing_padded_transformed = jnp.dot(wing_transform, CZ_aileron_wing_padded * CZ_Scale)
 
-        CZ_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'CZ_elevator_tail_{i}') for i in range(7)]
+        CZ_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'CZ_elevator_tail_{i}') for i in range(1, 1 + 7)]
         CZ_elevator_tail_value = self.mavrik_setup.CZ_elevator_tail_val
         CZ_elevator_tail_lookup_table = JaxNDInterpolator(CZ_elevator_tail_breakpoints, CZ_elevator_tail_value)
         CZ_elevator_tail = CZ_elevator_tail_lookup_table(jnp.array([
@@ -461,7 +458,7 @@ class MavrikAero:
         CZ_elevator_tail_padded = jnp.array([0.0, 0.0, CZ_elevator_tail])
         CZ_elevator_tail_padded_transformed = jnp.dot(tail_transform, CZ_elevator_tail_padded * CZ_Scale)
 
-        CZ_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'CZ_flap_wing_{i}') for i in range(7)]
+        CZ_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'CZ_flap_wing_{i}') for i in range(1, 1 + 7)]
         CZ_flap_wing_value = self.mavrik_setup.CZ_flap_wing_val
         CZ_flap_wing_lookup_table = JaxNDInterpolator(CZ_flap_wing_breakpoints, CZ_flap_wing_value)
         CZ_flap_wing = CZ_flap_wing_lookup_table(jnp.array([
@@ -470,7 +467,7 @@ class MavrikAero:
         CZ_flap_wing_padded = jnp.array([0.0, 0.0, CZ_flap_wing])
         CZ_flap_wing_padded_transformed = jnp.dot(wing_transform, CZ_flap_wing_padded * CZ_Scale)
 
-        CZ_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'CZ_rudder_tail_{i}') for i in range(7)]
+        CZ_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'CZ_rudder_tail_{i}') for i in range(1, 1 + 7)]
         CZ_rudder_tail_value = self.mavrik_setup.CZ_rudder_tail_val
         CZ_rudder_tail_lookup_table = JaxNDInterpolator(CZ_rudder_tail_breakpoints, CZ_rudder_tail_value)
         CZ_rudder_tail = CZ_rudder_tail_lookup_table(jnp.array([
@@ -480,7 +477,7 @@ class MavrikAero:
         CZ_rudder_tail_padded_transformed = jnp.dot(tail_transform, CZ_rudder_tail_padded * CZ_Scale)
 
         # Tail
-        CZ_tail_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_{i}') for i in range(6)]
+        CZ_tail_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_{i}') for i in range(1, 1 + 6)]
         CZ_tail_value = self.mavrik_setup.CZ_tail_val
         CZ_tail_lookup_table = JaxNDInterpolator(CZ_tail_breakpoints, CZ_tail_value)
         CZ_tail = CZ_tail_lookup_table(jnp.array([
@@ -490,7 +487,7 @@ class MavrikAero:
         CZ_tail_padded_transformed = jnp.dot(tail_transform, CZ_tail_padded * CZ_Scale)
 
         # Tail Damp p
-        CZ_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_damp_p_{i}') for i in range(6)]
+        CZ_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_damp_p_{i}') for i in range(1, 1 + 6)]
         CZ_tail_damp_p_value = self.mavrik_setup.CZ_tail_damp_p_val
         CZ_tail_damp_p_lookup_table = JaxNDInterpolator(CZ_tail_damp_p_breakpoints, CZ_tail_damp_p_value)
         CZ_tail_damp_p = CZ_tail_damp_p_lookup_table(jnp.array([
@@ -500,7 +497,7 @@ class MavrikAero:
         CZ_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_p_padded * CZ_Scale_p)
 
         # Tail Damp q
-        CZ_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_damp_q_{i}') for i in range(6)]
+        CZ_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_damp_q_{i}') for i in range(1, 1 + 6)]
         CZ_tail_damp_q_value = self.mavrik_setup.CZ_tail_damp_q_val
         CZ_tail_damp_q_lookup_table = JaxNDInterpolator(CZ_tail_damp_q_breakpoints, CZ_tail_damp_q_value)
         CZ_tail_damp_q = CZ_tail_damp_q_lookup_table(jnp.array([
@@ -510,7 +507,7 @@ class MavrikAero:
         CZ_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_q_padded * CZ_Scale_q)
 
         # Tail Damp r
-        CZ_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_damp_r_{i}') for i in range(6)]
+        CZ_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CZ_tail_damp_r_{i}') for i in range(1, 1 + 6)]
         CZ_tail_damp_r_value = self.mavrik_setup.CZ_tail_damp_r_val
         CZ_tail_damp_r_lookup_table = JaxNDInterpolator(CZ_tail_damp_r_breakpoints, CZ_tail_damp_r_value)
         CZ_tail_damp_r = CZ_tail_damp_r_lookup_table(jnp.array([
@@ -520,7 +517,7 @@ class MavrikAero:
         CZ_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_r_padded * CZ_Scale_r)
 
         # Wing
-        CZ_wing_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_{i}') for i in range(6)]
+        CZ_wing_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_{i}') for i in range(1, 1 + 6)]
         CZ_wing_value = self.mavrik_setup.CZ_wing_val
         CZ_wing_lookup_table = JaxNDInterpolator(CZ_wing_breakpoints, CZ_wing_value)
         CZ_wing = CZ_wing_lookup_table(jnp.array([
@@ -530,7 +527,7 @@ class MavrikAero:
         CZ_wing_padded_transformed = jnp.dot(wing_transform, CZ_wing_padded * CZ_Scale)
 
         # Wing Damp p
-        CZ_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_damp_p_{i}') for i in range(6)]
+        CZ_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_damp_p_{i}') for i in range(1, 1 + 6)]
         CZ_wing_damp_p_value = self.mavrik_setup.CZ_wing_damp_p_val
         CZ_wing_damp_p_lookup_table = JaxNDInterpolator(CZ_wing_damp_p_breakpoints, CZ_wing_damp_p_value)
         CZ_wing_damp_p = CZ_wing_damp_p_lookup_table(jnp.array([
@@ -540,7 +537,7 @@ class MavrikAero:
         CZ_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_p_padded * CZ_Scale_p)
 
         # Wing Damp q
-        CZ_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_damp_q_{i}') for i in range(6)]
+        CZ_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_damp_q_{i}') for i in range(1, 1 + 6)]
         CZ_wing_damp_q_value = self.mavrik_setup.CZ_wing_damp_q_val
         CZ_wing_damp_q_lookup_table = JaxNDInterpolator(CZ_wing_damp_q_breakpoints, CZ_wing_damp_q_value)
         CZ_wing_damp_q = CZ_wing_damp_q_lookup_table(jnp.array([
@@ -550,7 +547,7 @@ class MavrikAero:
         CZ_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_q_padded * CZ_Scale_q)
 
         # Wing Damp r
-        CZ_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_damp_r_{i}') for i in range(6)]
+        CZ_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'CZ_wing_damp_r_{i}') for i in range(1, 1 + 6)]
         CZ_wing_damp_r_value = self.mavrik_setup.CZ_wing_damp_r_val
         CZ_wing_damp_r_lookup_table = JaxNDInterpolator(CZ_wing_damp_r_breakpoints, CZ_wing_damp_r_value)
         CZ_wing_damp_r = CZ_wing_damp_r_lookup_table(jnp.array([
@@ -560,7 +557,7 @@ class MavrikAero:
         CZ_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_r_padded * CZ_Scale_r)
 
         # Hover Fuse
-        CZ_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'CZ_hover_fuse_{i}') for i in range(3)]
+        CZ_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'CZ_hover_fuse_{i}') for i in range(1, 1 + 3)]
         CZ_hover_fuse_value = self.mavrik_setup.CZ_hover_fuse_val
         CZ_hover_fuse_lookup_table = JaxNDInterpolator(CZ_hover_fuse_breakpoints, CZ_hover_fuse_value)
         CZ_hover_fuse = CZ_hover_fuse_lookup_table(jnp.array([
@@ -592,7 +589,7 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
-        Cl_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cl_aileron_wing_{i}') for i in range(7)]
+        Cl_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cl_aileron_wing_{i}') for i in range(1, 1 + 7)]
         Cl_aileron_wing_value = self.mavrik_setup.Cl_aileron_wing_()
         Cl_aileron_wing_lookup_table = JaxNDInterpolator(Cl_aileron_wing_breakpoints, Cl_aileron_wing_value)
         Cl_aileron_wing = Cl_aileron_wing_lookup_table(jnp.array([
@@ -601,7 +598,7 @@ class MavrikAero:
         Cl_aileron_wing_padded = jnp.array([Cl_aileron_wing, 0.0, 0.0])
         Cl_aileron_wing_padded_transformed = jnp.dot(wing_transform, Cl_aileron_wing_padded * Cl_Scale)
 
-        Cl_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'Cl_elevator_tail_{i}') for i in range(7)]
+        Cl_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'Cl_elevator_tail_{i}') for i in range(1, 1 + 7)]
         Cl_elevator_tail_value = self.mavrik_setup.Cl_elevator_tail_val
         Cl_elevator_tail_lookup_table = JaxNDInterpolator(Cl_elevator_tail_breakpoints, Cl_elevator_tail_value)
         Cl_elevator_tail = Cl_elevator_tail_lookup_table(jnp.array([
@@ -610,7 +607,7 @@ class MavrikAero:
         Cl_elevator_tail_padded = jnp.array([Cl_elevator_tail, 0.0, 0.0])
         Cl_elevator_tail_padded_transformed = jnp.dot(tail_transform, Cl_elevator_tail_padded * Cl_Scale)
 
-        Cl_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'Cl_flap_wing_{i}') for i in range(7)]
+        Cl_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'Cl_flap_wing_{i}') for i in range(1, 1 + 7)]
         Cl_flap_wing_value = self.mavrik_setup.Cl_flap_wing_val
         Cl_flap_wing_lookup_table = JaxNDInterpolator(Cl_flap_wing_breakpoints, Cl_flap_wing_value)
         Cl_flap_wing = Cl_flap_wing_lookup_table(jnp.array([
@@ -619,7 +616,7 @@ class MavrikAero:
         Cl_flap_wing_padded = jnp.array([Cl_flap_wing, 0.0, 0.0])
         Cl_flap_wing_padded_transformed = jnp.dot(wing_transform, Cl_flap_wing_padded * Cl_Scale)
 
-        Cl_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'Cl_rudder_tail_{i}') for i in range(7)]
+        Cl_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'Cl_rudder_tail_{i}') for i in range(1, 1 + 7)]
         Cl_rudder_tail_value = self.mavrik_setup.Cl_rudder_tail_val
         Cl_rudder_tail_lookup_table = JaxNDInterpolator(Cl_rudder_tail_breakpoints, Cl_rudder_tail_value)
         Cl_rudder_tail = Cl_rudder_tail_lookup_table(jnp.array([
@@ -629,7 +626,7 @@ class MavrikAero:
         Cl_rudder_tail_padded_transformed = jnp.dot(tail_transform, Cl_rudder_tail_padded * Cl_Scale)
 
         # Tail
-        Cl_tail_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_{i}') for i in range(6)]
+        Cl_tail_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_{i}') for i in range(1, 1 + 6)]
         Cl_tail_value = self.mavrik_setup.Cl_tail_val
         Cl_tail_lookup_table = JaxNDInterpolator(Cl_tail_breakpoints, Cl_tail_value)
         Cl_tail = Cl_tail_lookup_table(jnp.array([
@@ -639,7 +636,7 @@ class MavrikAero:
         Cl_tail_padded_transformed = jnp.dot(tail_transform, Cl_tail_padded * Cl_Scale)
 
         # Tail Damp p
-        Cl_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_damp_p_{i}') for i in range(6)]
+        Cl_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_damp_p_{i}') for i in range(1, 1 + 6)]
         Cl_tail_damp_p_value = self.mavrik_setup.Cl_tail_damp_p_val
         Cl_tail_damp_p_lookup_table = JaxNDInterpolator(Cl_tail_damp_p_breakpoints, Cl_tail_damp_p_value)
         Cl_tail_damp_p = Cl_tail_damp_p_lookup_table(jnp.array([
@@ -649,7 +646,7 @@ class MavrikAero:
         Cl_tail_damp_p_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_p_padded * Cl_Scale_p)
 
         # Tail Damp q
-        Cl_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_damp_q_{i}') for i in range(6)]
+        Cl_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_damp_q_{i}') for i in range(1, 1 + 6)]
         Cl_tail_damp_q_value = self.mavrik_setup.Cl_tail_damp_q_val
         Cl_tail_damp_q_lookup_table = JaxNDInterpolator(Cl_tail_damp_q_breakpoints, Cl_tail_damp_q_value)
         Cl_tail_damp_q = Cl_tail_damp_q_lookup_table(jnp.array([
@@ -659,7 +656,7 @@ class MavrikAero:
         Cl_tail_damp_q_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_q_padded * Cl_Scale_q)
 
         # Tail Damp r
-        Cl_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_damp_r_{i}') for i in range(6)]
+        Cl_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cl_tail_damp_r_{i}') for i in range(1, 1 + 6)]
         Cl_tail_damp_r_value = self.mavrik_setup.Cl_tail_damp_r_val
         Cl_tail_damp_r_lookup_table = JaxNDInterpolator(Cl_tail_damp_r_breakpoints, Cl_tail_damp_r_value)
         Cl_tail_damp_r = Cl_tail_damp_r_lookup_table(jnp.array([
@@ -669,7 +666,7 @@ class MavrikAero:
         Cl_tail_damp_r_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_r_padded * Cl_Scale_r)
 
         # Wing
-        Cl_wing_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_{i}') for i in range(6)]
+        Cl_wing_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_{i}') for i in range(1, 1 + 6)]
         Cl_wing_value = self.mavrik_setup.Cl_wing_val
         Cl_wing_lookup_table = JaxNDInterpolator(Cl_wing_breakpoints, Cl_wing_value)
         Cl_wing = Cl_wing_lookup_table(jnp.array([
@@ -679,7 +676,7 @@ class MavrikAero:
         Cl_wing_padded_transformed = jnp.dot(wing_transform, Cl_wing_padded * Cl_Scale)
 
         # Wing Damp p
-        Cl_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_damp_p_{i}') for i in range(6)]
+        Cl_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_damp_p_{i}') for i in range(1, 1 + 6)]
         Cl_wing_damp_p_value = self.mavrik_setup.Cl_wing_damp_p_val
         Cl_wing_damp_p_lookup_table = JaxNDInterpolator(Cl_wing_damp_p_breakpoints, Cl_wing_damp_p_value)
         Cl_wing_damp_p = Cl_wing_damp_p_lookup_table(jnp.array([
@@ -689,7 +686,7 @@ class MavrikAero:
         Cl_wing_damp_p_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_p_padded * Cl_Scale_p)
 
         # Wing Damp q
-        Cl_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_damp_q_{i}') for i in range(6)]
+        Cl_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_damp_q_{i}') for i in range(1, 1 + 6)]
         Cl_wing_damp_q_value = self.mavrik_setup.Cl_wing_damp_q_val
         Cl_wing_damp_q_lookup_table = JaxNDInterpolator(Cl_wing_damp_q_breakpoints, Cl_wing_damp_q_value)
         Cl_wing_damp_q = Cl_wing_damp_q_lookup_table(jnp.array([
@@ -699,7 +696,7 @@ class MavrikAero:
         Cl_wing_damp_q_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_q_padded * Cl_Scale_q)
 
         # Wing Damp r
-        Cl_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_damp_r_{i}') for i in range(6)]
+        Cl_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cl_wing_damp_r_{i}') for i in range(1, 1 + 6)]
         Cl_wing_damp_r_value = self.mavrik_setup.Cl_wing_damp_r_val
         Cl_wing_damp_r_lookup_table = JaxNDInterpolator(Cl_wing_damp_r_breakpoints, Cl_wing_damp_r_value)
         Cl_wing_damp_r = Cl_wing_damp_r_lookup_table(jnp.array([
@@ -709,7 +706,7 @@ class MavrikAero:
         Cl_wing_damp_r_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_r_padded * Cl_Scale_r)
 
         # Hover Fuse
-        Cl_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'Cl_hover_fuse_{i}') for i in range(3)]
+        Cl_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'Cl_hover_fuse_{i}') for i in range(1, 1 + 3)]
         Cl_hover_fuse_value = self.mavrik_setup.Cl_hover_fuse_val
         Cl_hover_fuse_lookup_table = JaxNDInterpolator(Cl_hover_fuse_breakpoints, Cl_hover_fuse_value)
         Cl_hover_fuse = Cl_hover_fuse_lookup_table(jnp.array([
@@ -741,7 +738,7 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
-        Cm_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cm_aileron_wing_{i}') for i in range(7)]
+        Cm_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cm_aileron_wing_{i}') for i in range(1, 1 + 7)]
         Cm_aileron_wing_value = self.mavrik_setup.Cm_aileron_wing_()
         Cm_aileron_wing_lookup_table = JaxNDInterpolator(Cm_aileron_wing_breakpoints, Cm_aileron_wing_value)
         Cm_aileron_wing = Cm_aileron_wing_lookup_table(jnp.array([
@@ -750,7 +747,7 @@ class MavrikAero:
         Cm_aileron_wing_padded = jnp.array([0.0, Cm_aileron_wing, 0.0])
         Cm_aileron_wing_padded_transformed = jnp.dot(wing_transform, Cm_aileron_wing_padded * Cm_Scale)
 
-        Cm_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'Cm_elevator_tail_{i}') for i in range(7)]
+        Cm_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'Cm_elevator_tail_{i}') for i in range(1, 1 + 7)]
         Cm_elevator_tail_value = self.mavrik_setup.Cm_elevator_tail_val
         Cm_elevator_tail_lookup_table = JaxNDInterpolator(Cm_elevator_tail_breakpoints, Cm_elevator_tail_value)
         Cm_elevator_tail = Cm_elevator_tail_lookup_table(jnp.array([
@@ -759,7 +756,7 @@ class MavrikAero:
         Cm_elevator_tail_padded = jnp.array([0.0, Cm_elevator_tail, 0.0])
         Cm_elevator_tail_padded_transformed = jnp.dot(tail_transform, Cm_elevator_tail_padded * Cm_Scale)
 
-        Cm_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'Cm_flap_wing_{i}') for i in range(7)]
+        Cm_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'Cm_flap_wing_{i}') for i in range(1, 1 + 7)]
         Cm_flap_wing_value = self.mavrik_setup.Cm_flap_wing_val
         Cm_flap_wing_lookup_table = JaxNDInterpolator(Cm_flap_wing_breakpoints, Cm_flap_wing_value)
         Cm_flap_wing = Cm_flap_wing_lookup_table(jnp.array([
@@ -768,7 +765,7 @@ class MavrikAero:
         Cm_flap_wing_padded = jnp.array([0.0, Cm_flap_wing, 0.0])
         Cm_flap_wing_padded_transformed = jnp.dot(wing_transform, Cm_flap_wing_padded * Cm_Scale)
 
-        Cm_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'Cm_rudder_tail_{i}') for i in range(7)]
+        Cm_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'Cm_rudder_tail_{i}') for i in range(1, 1 + 7)]
         Cm_rudder_tail_value = self.mavrik_setup.Cm_rudder_tail_val
         Cm_rudder_tail_lookup_table = JaxNDInterpolator(Cm_rudder_tail_breakpoints, Cm_rudder_tail_value)
         Cm_rudder_tail = Cm_rudder_tail_lookup_table(jnp.array([
@@ -778,7 +775,7 @@ class MavrikAero:
         Cm_rudder_tail_padded_transformed = jnp.dot(tail_transform, Cm_rudder_tail_padded * Cm_Scale)
 
         # Tail
-        Cm_tail_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_{i}') for i in range(6)]
+        Cm_tail_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_{i}') for i in range(1, 1 + 6)]
         Cm_tail_value = self.mavrik_setup.Cm_tail_val
         Cm_tail_lookup_table = JaxNDInterpolator(Cm_tail_breakpoints, Cm_tail_value)
         Cm_tail = Cm_tail_lookup_table(jnp.array([
@@ -788,7 +785,7 @@ class MavrikAero:
         Cm_tail_padded_transformed = jnp.dot(tail_transform, Cm_tail_padded * Cm_Scale)
 
         # Tail Damp p
-        Cm_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_damp_p_{i}') for i in range(6)]
+        Cm_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_damp_p_{i}') for i in range(1, 1 + 6)]
         Cm_tail_damp_p_value = self.mavrik_setup.Cm_tail_damp_p_val
         Cm_tail_damp_p_lookup_table = JaxNDInterpolator(Cm_tail_damp_p_breakpoints, Cm_tail_damp_p_value)
         Cm_tail_damp_p = Cm_tail_damp_p_lookup_table(jnp.array([
@@ -798,7 +795,7 @@ class MavrikAero:
         Cm_tail_damp_p_padded_transformed = jnp.dot(tail_transform, Cm_tail_damp_p_padded * Cm_Scale_p)
 
         # Tail Damp q
-        Cm_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_damp_q_{i}') for i in range(6)]
+        Cm_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_damp_q_{i}') for i in range(1, 1 + 6)]
         Cm_tail_damp_q_value = self.mavrik_setup.Cm_tail_damp_q_val
         Cm_tail_damp_q_lookup_table = JaxNDInterpolator(Cm_tail_damp_q_breakpoints, Cm_tail_damp_q_value)
         Cm_tail_damp_q = Cm_tail_damp_q_lookup_table(jnp.array([
@@ -808,7 +805,7 @@ class MavrikAero:
         Cm_tail_damp_q_padded_transformed = jnp.dot(tail_transform, Cm_tail_damp_q_padded * Cm_Scale_q)
 
         # Tail Damp r
-        Cm_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_damp_r_{i}') for i in range(6)]
+        Cm_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cm_tail_damp_r_{i}') for i in range(1, 1 + 6)]
         Cm_tail_damp_r_value = self.mavrik_setup.Cm_tail_damp_r_val
         Cm_tail_damp_r_lookup_table = JaxNDInterpolator(Cm_tail_damp_r_breakpoints, Cm_tail_damp_r_value)
         Cm_tail_damp_r = Cm_tail_damp_r_lookup_table(jnp.array([
@@ -818,7 +815,7 @@ class MavrikAero:
         Cm_tail_damp_r_padded_transformed = jnp.dot(tail_transform, Cm_tail_damp_r_padded * Cm_Scale_r)
 
         # Wing
-        Cm_wing_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_{i}') for i in range(6)]
+        Cm_wing_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_{i}') for i in range(1, 1 + 6)]
         Cm_wing_value = self.mavrik_setup.Cm_wing_val
         Cm_wing_lookup_table = JaxNDInterpolator(Cm_wing_breakpoints, Cm_wing_value)
         Cm_wing = Cm_wing_lookup_table(jnp.array([
@@ -828,7 +825,7 @@ class MavrikAero:
         Cm_wing_padded_transformed = jnp.dot(wing_transform, Cm_wing_padded * Cm_Scale)
 
         # Wing Damp p
-        Cm_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_damp_p_{i}') for i in range(6)]
+        Cm_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_damp_p_{i}') for i in range(1, 1 + 6)]
         Cm_wing_damp_p_value = self.mavrik_setup.Cm_wing_damp_p_val
         Cm_wing_damp_p_lookup_table = JaxNDInterpolator(Cm_wing_damp_p_breakpoints, Cm_wing_damp_p_value)
         Cm_wing_damp_p = Cm_wing_damp_p_lookup_table(jnp.array([
@@ -838,7 +835,7 @@ class MavrikAero:
         Cm_wing_damp_p_padded_transformed = jnp.dot(wing_transform, Cm_wing_damp_p_padded * Cm_Scale_p)
 
         # Wing Damp q
-        Cm_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_damp_q_{i}') for i in range(6)]
+        Cm_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_damp_q_{i}') for i in range(1, 1 + 6)]
         Cm_wing_damp_q_value = self.mavrik_setup.Cm_wing_damp_q_val
         Cm_wing_damp_q_lookup_table = JaxNDInterpolator(Cm_wing_damp_q_breakpoints, Cm_wing_damp_q_value)
         Cm_wing_damp_q = Cm_wing_damp_q_lookup_table(jnp.array([
@@ -848,7 +845,7 @@ class MavrikAero:
         Cm_wing_damp_q_padded_transformed = jnp.dot(wing_transform, Cm_wing_damp_q_padded * Cm_Scale_q)
 
         # Wing Damp r
-        Cm_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_damp_r_{i}') for i in range(6)]
+        Cm_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cm_wing_damp_r_{i}') for i in range(1, 1 + 6)]
         Cm_wing_damp_r_value = self.mavrik_setup.Cm_wing_damp_r_val
         Cm_wing_damp_r_lookup_table = JaxNDInterpolator(Cm_wing_damp_r_breakpoints, Cm_wing_damp_r_value)
         Cm_wing_damp_r = Cm_wing_damp_r_lookup_table(jnp.array([
@@ -858,7 +855,7 @@ class MavrikAero:
         Cm_wing_damp_r_padded_transformed = jnp.dot(wing_transform, Cm_wing_damp_r_padded * Cm_Scale_r)
 
         # Hover Fuse
-        Cm_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'Cm_hover_fuse_{i}') for i in range(3)]
+        Cm_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'Cm_hover_fuse_{i}') for i in range(1, 1 + 3)]
         Cm_hover_fuse_value = self.mavrik_setup.Cm_hover_fuse_val
         Cm_hover_fuse_lookup_table = JaxNDInterpolator(Cm_hover_fuse_breakpoints, Cm_hover_fuse_value)
         Cm_hover_fuse = Cm_hover_fuse_lookup_table(jnp.array([
@@ -890,7 +887,7 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
-        Cn_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cn_aileron_wing_{i}') for i in range(7)]
+        Cn_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cn_aileron_wing_{i}') for i in range(1, 1 + 7)]
         Cn_aileron_wing_value = self.mavrik_setup.Cn_aileron_wing_()
         Cn_aileron_wing_lookup_table = JaxNDInterpolator(Cn_aileron_wing_breakpoints, Cn_aileron_wing_value)
         Cn_aileron_wing = Cn_aileron_wing_lookup_table(jnp.array([
@@ -899,7 +896,7 @@ class MavrikAero:
         Cn_aileron_wing_padded = jnp.array([0.0, 0.0, Cn_aileron_wing])
         Cn_aileron_wing_padded_transformed = jnp.dot(wing_transform, Cn_aileron_wing_padded * Cn_Scale)
 
-        Cn_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'Cn_elevator_tail_{i}') for i in range(7)]
+        Cn_elevator_tail_breakpoints = [getattr(self.mavrik_setup, f'Cn_elevator_tail_{i}') for i in range(1, 1 + 7)]
         Cn_elevator_tail_value = self.mavrik_setup.Cn_elevator_tail_val
         Cn_elevator_tail_lookup_table = JaxNDInterpolator(Cn_elevator_tail_breakpoints, Cn_elevator_tail_value)
         Cn_elevator_tail = Cn_elevator_tail_lookup_table(jnp.array([
@@ -908,7 +905,7 @@ class MavrikAero:
         Cn_elevator_tail_padded = jnp.array([0.0, 0.0, Cn_elevator_tail])
         Cn_elevator_tail_padded_transformed = jnp.dot(tail_transform, Cn_elevator_tail_padded * Cn_Scale)
 
-        Cn_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'Cn_flap_wing_{i}') for i in range(7)]
+        Cn_flap_wing_breakpoints = [getattr(self.mavrik_setup, f'Cn_flap_wing_{i}') for i in range(1, 1 + 7)]
         Cn_flap_wing_value = self.mavrik_setup.Cn_flap_wing_val
         Cn_flap_wing_lookup_table = JaxNDInterpolator(Cn_flap_wing_breakpoints, Cn_flap_wing_value)
         Cn_flap_wing = Cn_flap_wing_lookup_table(jnp.array([
@@ -917,7 +914,7 @@ class MavrikAero:
         Cn_flap_wing_padded = jnp.array([0.0, 0.0, Cn_flap_wing])
         Cn_flap_wing_padded_transformed = jnp.dot(wing_transform, Cn_flap_wing_padded * Cn_Scale)
 
-        Cn_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'Cn_rudder_tail_{i}') for i in range(7)]
+        Cn_rudder_tail_breakpoints = [getattr(self.mavrik_setup, f'Cn_rudder_tail_{i}') for i in range(1, 1 + 7)]
         Cn_rudder_tail_value = self.mavrik_setup.Cn_rudder_tail_val
         Cn_rudder_tail_lookup_table = JaxNDInterpolator(Cn_rudder_tail_breakpoints, Cn_rudder_tail_value)
         Cn_rudder_tail = Cn_rudder_tail_lookup_table(jnp.array([
@@ -927,7 +924,7 @@ class MavrikAero:
         Cn_rudder_tail_padded_transformed = jnp.dot(tail_transform, Cn_rudder_tail_padded * Cn_Scale)
 
         # Tail
-        Cn_tail_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_{i}') for i in range(6)]
+        Cn_tail_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_{i}') for i in range(1, 1 + 6)]
         Cn_tail_value = self.mavrik_setup.Cn_tail_val
         Cn_tail_lookup_table = JaxNDInterpolator(Cn_tail_breakpoints, Cn_tail_value)
         Cn_tail = Cn_tail_lookup_table(jnp.array([
@@ -937,7 +934,7 @@ class MavrikAero:
         Cn_tail_padded_transformed = jnp.dot(tail_transform, Cn_tail_padded * Cn_Scale)
 
         # Tail Damp p
-        Cn_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_damp_p_{i}') for i in range(6)]
+        Cn_tail_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_damp_p_{i}') for i in range(1, 1 + 6)]
         Cn_tail_damp_p_value = self.mavrik_setup.Cn_tail_damp_p_val
         Cn_tail_damp_p_lookup_table = JaxNDInterpolator(Cn_tail_damp_p_breakpoints, Cn_tail_damp_p_value)
         Cn_tail_damp_p = Cn_tail_damp_p_lookup_table(jnp.array([
@@ -947,7 +944,7 @@ class MavrikAero:
         Cn_tail_damp_p_padded_transformed = jnp.dot(tail_transform, Cn_tail_damp_p_padded * Cn_Scale_p)
 
         # Tail Damp q
-        Cn_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_damp_q_{i}') for i in range(6)]
+        Cn_tail_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_damp_q_{i}') for i in range(1, 1 + 6)]
         Cn_tail_damp_q_value = self.mavrik_setup.Cn_tail_damp_q_val
         Cn_tail_damp_q_lookup_table = JaxNDInterpolator(Cn_tail_damp_q_breakpoints, Cn_tail_damp_q_value)
         Cn_tail_damp_q = Cn_tail_damp_q_lookup_table(jnp.array([
@@ -957,7 +954,7 @@ class MavrikAero:
         Cn_tail_damp_q_padded_transformed = jnp.dot(tail_transform, Cn_tail_damp_q_padded * Cn_Scale_q)
 
         # Tail Damp r
-        Cn_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_damp_r_{i}') for i in range(6)]
+        Cn_tail_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cn_tail_damp_r_{i}') for i in range(1, 1 + 6)]
         Cn_tail_damp_r_value = self.mavrik_setup.Cn_tail_damp_r_val
         Cn_tail_damp_r_lookup_table = JaxNDInterpolator(Cn_tail_damp_r_breakpoints, Cn_tail_damp_r_value)
         Cn_tail_damp_r = Cn_tail_damp_r_lookup_table(jnp.array([
@@ -967,7 +964,7 @@ class MavrikAero:
         Cn_tail_damp_r_padded_transformed = jnp.dot(tail_transform, Cn_tail_damp_r_padded * Cn_Scale_r)
 
         # Wing
-        Cn_wing_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_{i}') for i in range(6)]
+        Cn_wing_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_{i}') for i in range(1, 1 + 6)]
         Cn_wing_value = self.mavrik_setup.Cn_wing_val
         Cn_wing_lookup_table = JaxNDInterpolator(Cn_wing_breakpoints, Cn_wing_value)
         Cn_wing = Cn_wing_lookup_table(jnp.array([
@@ -977,7 +974,7 @@ class MavrikAero:
         Cn_wing_padded_transformed = jnp.dot(wing_transform, Cn_wing_padded * Cn_Scale)
 
         # Wing Damp p
-        Cn_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_damp_p_{i}') for i in range(6)]
+        Cn_wing_damp_p_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_damp_p_{i}') for i in range(1, 1 + 6)]
         Cn_wing_damp_p_value = self.mavrik_setup.Cn_wing_damp_p_val
         Cn_wing_damp_p_lookup_table = JaxNDInterpolator(Cn_wing_damp_p_breakpoints, Cn_wing_damp_p_value)
         Cn_wing_damp_p = Cn_wing_damp_p_lookup_table(jnp.array([
@@ -987,7 +984,7 @@ class MavrikAero:
         Cn_wing_damp_p_padded_transformed = jnp.dot(wing_transform, Cn_wing_damp_p_padded * Cn_Scale_p)
 
         # Wing Damp q
-        Cn_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_damp_q_{i}') for i in range(6)]
+        Cn_wing_damp_q_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_damp_q_{i}') for i in range(1, 1 + 6)]
         Cn_wing_damp_q_value = self.mavrik_setup.Cn_wing_damp_q_val
         Cn_wing_damp_q_lookup_table = JaxNDInterpolator(Cn_wing_damp_q_breakpoints, Cn_wing_damp_q_value)
         Cn_wing_damp_q = Cn_wing_damp_q_lookup_table(jnp.array([
@@ -997,7 +994,7 @@ class MavrikAero:
         Cn_wing_damp_q_padded_transformed = jnp.dot(wing_transform, Cn_wing_damp_q_padded * Cn_Scale_q)
 
         # Wing Damp r
-        Cn_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_damp_r_{i}') for i in range(6)]
+        Cn_wing_damp_r_breakpoints = [getattr(self.mavrik_setup, f'Cn_wing_damp_r_{i}') for i in range(1, 1 + 6)]
         Cn_wing_damp_r_value = self.mavrik_setup.Cn_wing_damp_r_val
         Cn_wing_damp_r_lookup_table = JaxNDInterpolator(Cn_wing_damp_r_breakpoints, Cn_wing_damp_r_value)
         Cn_wing_damp_r = Cn_wing_damp_r_lookup_table(jnp.array([
@@ -1007,7 +1004,7 @@ class MavrikAero:
         Cn_wing_damp_r_padded_transformed = jnp.dot(wing_transform, Cn_wing_damp_r_padded * Cn_Scale_r)
 
         # Hover Fuse
-        Cn_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'Cn_hover_fuse_{i}') for i in range(3)]
+        Cn_hover_fuse_breakpoints = [getattr(self.mavrik_setup, f'Cn_hover_fuse_{i}') for i in range(1, 1 + 3)]
         Cn_hover_fuse_value = self.mavrik_setup.Cn_hover_fuse_val
         Cn_hover_fuse_lookup_table = JaxNDInterpolator(Cn_hover_fuse_breakpoints, Cn_hover_fuse_value)
         Cn_hover_fuse = Cn_hover_fuse_lookup_table(jnp.array([
@@ -1035,7 +1032,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         Ct_Scale_tail_left = 1.225 * u.RPM_tailLeft**2 * 0.005059318992632 * 2.777777777777778e-4
-        Ct_tail_left_breakpoints = [getattr(self.mavrik_setup, f'Ct_tail_left_{i}') for i in range(3)]
+        Ct_tail_left_breakpoints = [getattr(self.mavrik_setup, f'Ct_tail_left_{i}') for i in range(1, 1 + 4)]
         Ct_tail_left_value = self.mavrik_setup.Ct_tail_left_val
         Ct_tail_left_lookup_table = JaxNDInterpolator(Ct_tail_left_breakpoints, Ct_tail_left_value)
         Ct_tail_left = Ct_tail_left_lookup_table(jnp.array([
@@ -1046,7 +1043,7 @@ class MavrikAero:
 
 
         Ct_Scale_tail_right = 1.225 * u.RPM_tailRight**2 * 0.005059318992632 * 2.777777777777778e-4 
-        Ct_tail_right_breakpoints = [getattr(self.mavrik_setup, f'Ct_tail_right_{i}') for i in range(3)]
+        Ct_tail_right_breakpoints = [getattr(self.mavrik_setup, f'Ct_tail_right_{i}') for i in range(1, 1 + 4)]
         Ct_tail_right_value = self.mavrik_setup.Ct_tail_right_val
         Ct_tail_right_lookup_table = JaxNDInterpolator(Ct_tail_right_breakpoints, Ct_tail_right_value)
         Ct_tail_right = Ct_tail_right_lookup_table(jnp.array([
@@ -1057,7 +1054,7 @@ class MavrikAero:
 
     
         Ct_Scale_left_out = 1.225 * u.RPM_leftOut1**2 * 0.021071715921 * 2.777777777777778e-4 
-        Ct_left_out_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_out_{i}') for i in range(3)]
+        Ct_left_out_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_out_{i}') for i in range(1, 1 + 4)]
         Ct_left_out_value = self.mavrik_setup.Ct_left_out_val
         Ct_left_out_lookup_table = JaxNDInterpolator(Ct_left_out_breakpoints, Ct_left_out_value)
         Ct_left_out = Ct_left_out_lookup_table(jnp.array([
@@ -1068,7 +1065,7 @@ class MavrikAero:
 
 
         Ct_Scale_left_2 = 1.225 * u.RPM_leftOut2**2 * 0.021071715921 * 2.777777777777778e-4 
-        Ct_left_2_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_2_{i}') for i in range(3)]
+        Ct_left_2_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_2_{i}') for i in range(1, 1 + 4)]
         Ct_left_2_value = self.mavrik_setup.Ct_left_2_val
         Ct_left_2_lookup_table = JaxNDInterpolator(Ct_left_2_breakpoints, Ct_left_2_value)
         Ct_left_2 = Ct_left_2_lookup_table(jnp.array([
@@ -1080,7 +1077,7 @@ class MavrikAero:
 
 
         Ct_Scale_left_3 = 1.225 * u.RPM_leftOut3**2 * 0.021071715921 * 2.777777777777778e-4 
-        Ct_left_3_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_3_{i}') for i in range(3)]
+        Ct_left_3_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_3_{i}') for i in range(1, 1 + 4)]
         Ct_left_3_value = self.mavrik_setup.Ct_left_3_val
         Ct_left_3_lookup_table = JaxNDInterpolator(Ct_left_3_breakpoints, Ct_left_3_value)
         Ct_left_3 = Ct_left_3_lookup_table(jnp.array([
@@ -1090,7 +1087,7 @@ class MavrikAero:
         Ct_left_3_transformed = jnp.dot(wing_transform, Ct_left_3_padded * Ct_Scale_left_3)
 
         Ct_Scale_left_4 = 1.225 * u.RPM_leftOut4**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_left_4_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_4_{i}') for i in range(3)]
+        Ct_left_4_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_4_{i}') for i in range(1, 1 + 4)]
         Ct_left_4_value = self.mavrik_setup.Ct_left_4_val  
         Ct_left_4_lookup_table = JaxNDInterpolator(Ct_left_4_breakpoints, Ct_left_4_value)
         Ct_left_4 = Ct_left_4_lookup_table(jnp.array([
@@ -1100,7 +1097,7 @@ class MavrikAero:
         Ct_left_4_transformed = jnp.dot(wing_transform, Ct_left_4_padded * Ct_Scale_left_4)
 
         Ct_Scale_left_5 = 1.225 * u.RPM_leftOut5**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_left_5_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_5_{i}') for i in range(3)]
+        Ct_left_5_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_5_{i}') for i in range(1, 1 + 4)]
         Ct_left_5_value = self.mavrik_setup.Ct_left_5_val
         Ct_left_5_lookup_table = JaxNDInterpolator(Ct_left_5_breakpoints, Ct_left_5_value)
         Ct_left_5 = Ct_left_5_lookup_table(jnp.array([
@@ -1112,7 +1109,7 @@ class MavrikAero:
 
 
         Ct_Scale_left_6 = 1.225 * u.RPM_leftOut6**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_left_6_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_6_{i}') for i in range(3)]
+        Ct_left_6_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_6_{i}') for i in range(1, 1 + 4)]
         Ct_left_6_value = self.mavrik_setup.Ct_left_6_val
         Ct_left_6_lookup_table = JaxNDInterpolator(Ct_left_6_breakpoints, Ct_left_6_value)
         Ct_left_6 = Ct_left_6_lookup_table(jnp.array([
@@ -1122,7 +1119,7 @@ class MavrikAero:
         Ct_left_6_transformed = jnp.dot(wing_transform, Ct_left_6_padded * Ct_Scale_left_6)
 
         Ct_Scale_right_7 = 1.225 * u.RPM_right7In**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_7_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_7_{i}') for i in range(3)]
+        Ct_right_7_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_7_{i}') for i in range(1, 1 + 4)]
         Ct_right_7_value = self.mavrik_setup.Ct_right_7_val
         Ct_right_7_lookup_table = JaxNDInterpolator(Ct_right_7_breakpoints, Ct_right_7_value)
         Ct_right_7 = Ct_right_7_lookup_table(jnp.array([
@@ -1132,7 +1129,7 @@ class MavrikAero:
         Ct_right_7_transformed = jnp.dot(wing_transform, Ct_right_7_padded * Ct_Scale_right_7)
 
         Ct_Scale_right_8 = 1.225 * u.RPM_right8**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_8_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_8_{i}') for i in range(3)]
+        Ct_right_8_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_8_{i}') for i in range(1, 1 + 4)]
         Ct_right_8_value = self.mavrik_setup.Ct_right_8_val
         Ct_right_8_lookup_table = JaxNDInterpolator(Ct_right_8_breakpoints, Ct_right_8_value)
         Ct_right_8 = Ct_right_8_lookup_table(jnp.array([
@@ -1142,7 +1139,7 @@ class MavrikAero:
         Ct_right_8_transformed = jnp.dot(wing_transform, Ct_right_8_padded * Ct_Scale_right_8)
 
         Ct_Scale_right_9 = 1.225 * u.RPM_right9**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_9_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_9_{i}') for i in range(3)]
+        Ct_right_9_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_9_{i}') for i in range(1, 1 + 4)]
         Ct_right_9_value = self.mavrik_setup.Ct_right_9_val
         Ct_right_9_lookup_table = JaxNDInterpolator(Ct_right_9_breakpoints, Ct_right_9_value)
         Ct_right_9 = Ct_right_9_lookup_table(jnp.array([
@@ -1152,7 +1149,7 @@ class MavrikAero:
         Ct_right_9_transformed = jnp.dot(wing_transform, Ct_right_9_padded * Ct_Scale_right_9)
 
         Ct_Scale_right_10 = 1.225 * u.RPM_right10**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_10_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_10_{i}') for i in range(3)]
+        Ct_right_10_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_10_{i}') for i in range(1, 1 + 4)]
         Ct_right_10_value = self.mavrik_setup.Ct_right_10_val
         Ct_right_10_lookup_table = JaxNDInterpolator(Ct_right_10_breakpoints, Ct_right_10_value)
         Ct_right_10 = Ct_right_10_lookup_table(jnp.array([
@@ -1162,7 +1159,7 @@ class MavrikAero:
         Ct_right_10_transformed = jnp.dot(wing_transform, Ct_right_10_padded * Ct_Scale_right_10)
 
         Ct_Scale_right_11 = 1.225 * u.RPM_right11**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_11_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_11_{i}') for i in range(3)]
+        Ct_right_11_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_11_{i}') for i in range(1, 1 + 4)]
         Ct_right_11_value = self.mavrik_setup.Ct_right_11_val
         Ct_right_11_lookup_table = JaxNDInterpolator(Ct_right_11_breakpoints, Ct_right_11_value)
         Ct_right_11 = Ct_right_11_lookup_table(jnp.array([
@@ -1173,7 +1170,7 @@ class MavrikAero:
 
 
         Ct_Scale_right_12 = 1.225 * u.RPM_right12Out**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_12_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_12_{i}') for i in range(3)]
+        Ct_right_12_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_12_{i}') for i in range(1, 1 + 4)]
         Ct_right_12_value = self.mavrik_setup.Ct_right_12_val
         Ct_right_12_lookup_table = JaxNDInterpolator(Ct_right_12_breakpoints, Ct_right_12_value)
         Ct_right_12 = Ct_right_12_lookup_table(jnp.array([
@@ -1229,7 +1226,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         Kq_Scale_tail_left = - 1.225 * u.RPM_tailLeft**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_tail_left_breakpoints = [getattr(self.mavrik_setup, f'Kq_tail_left_{i}') for i in range(4)]
+        Kq_tail_left_breakpoints = [getattr(self.mavrik_setup, f'Kq_tail_left_{i}') for i in range(1, 1 + 4)]
         Kq_tail_left_value = self.mavrik_setup.Kq_tail_left_val
         Kq_tail_left_lookup_table = JaxNDInterpolator(Kq_tail_left_breakpoints, Kq_tail_left_value)
         Kq_tail_left = Kq_tail_left_lookup_table(jnp.array([
@@ -1240,7 +1237,7 @@ class MavrikAero:
 
 
         Kq_Scale_tail_right = - 1.225 * u.RPM_tailRight**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_tail_right_breakpoints = [getattr(self.mavrik_setup, f'Kq_tail_right_{i}') for i in range(4)]
+        Kq_tail_right_breakpoints = [getattr(self.mavrik_setup, f'Kq_tail_right_{i}') for i in range(1, 1 + 4)]
         Kq_tail_right_value = self.mavrik_setup.Kq_tail_right_val
         Kq_tail_right_lookup_table = JaxNDInterpolator(Kq_tail_right_breakpoints, Kq_tail_right_value)
         Kq_tail_right = Kq_tail_right_lookup_table(jnp.array([
@@ -1250,7 +1247,7 @@ class MavrikAero:
         Kq_tail_right_transformed = jnp.dot(tail_transform, Kq_tail_right_padded * Kq_Scale_tail_right)
 
         Kq_Scale_left_out = - 1.225 * u.RPM_leftOut1**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_left_out_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_out_{i}') for i in range(4)]
+        Kq_left_out_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_out_{i}') for i in range(1, 1 + 4)]
         Kq_left_out_value = self.mavrik_setup.Kq_left_out_val
         Kq_left_out_lookup_table = JaxNDInterpolator(Kq_left_out_breakpoints, Kq_left_out_value)
         Kq_left_out = Kq_left_out_lookup_table(jnp.array([
@@ -1260,7 +1257,7 @@ class MavrikAero:
         Kq_left_out_transformed = jnp.dot(wing_transform, Kq_left_out_padded * Kq_Scale_left_out)
 
         Kq_Scale_left_2 = - 1.225 * u.RPM_left2**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_left_2_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_2_{i}') for i in range(4)]
+        Kq_left_2_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_2_{i}') for i in range(1, 1 + 4)]
         Kq_left_2_value = self.mavrik_setup.Kq_left_2_val
         Kq_left_2_lookup_table = JaxNDInterpolator(Kq_left_2_breakpoints, Kq_left_2_value)
         Kq_left_2 = Kq_left_2_lookup_table(jnp.array([
@@ -1270,7 +1267,7 @@ class MavrikAero:
         Kq_left_2_transformed = jnp.dot(wing_transform, Kq_left_2_padded * Kq_Scale_left_2)
 
         Kq_Scale_left_3 = - 1.225 * u.RPM_left3**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_left_3_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_3_{i}') for i in range(4)]
+        Kq_left_3_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_3_{i}') for i in range(1, 1 + 4)]
         Kq_left_3_value = self.mavrik_setup.Kq_left_3_val
         Kq_left_3_lookup_table = JaxNDInterpolator(Kq_left_3_breakpoints, Kq_left_3_value)
         Kq_left_3 = Kq_left_3_lookup_table(jnp.array([
@@ -1280,7 +1277,7 @@ class MavrikAero:
         Kq_left_3_transformed = jnp.dot(wing_transform, Kq_left_3_padded * Kq_Scale_left_3)
 
         Kq_Scale_left_4 = - 1.225 * u.RPM_left4**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_left_4_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_4_{i}') for i in range(4)]
+        Kq_left_4_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_4_{i}') for i in range(1, 1 + 4)]
         Kq_left_4_value = self.mavrik_setup.Kq_left_4_val
         Kq_left_4_lookup_table = JaxNDInterpolator(Kq_left_4_breakpoints, Kq_left_4_value)
         Kq_left_4 = Kq_left_4_lookup_table(jnp.array([
@@ -1291,7 +1288,7 @@ class MavrikAero:
 
 
         Kq_Scale_left_5 = - 1.225 * u.RPM_left5**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_left_5_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_5_{i}') for i in range(4)]
+        Kq_left_5_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_5_{i}') for i in range(1, 1 + 4)]
         Kq_left_5_value = self.mavrik_setup.Kq_left_5_val
         Kq_left_5_lookup_table = JaxNDInterpolator(Kq_left_5_breakpoints, Kq_left_5_value)
         Kq_left_5 = Kq_left_5_lookup_table(jnp.array([
@@ -1302,7 +1299,7 @@ class MavrikAero:
 
 
         Kq_Scale_left_6_in = - 1.225 * u.RPM_left6In**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_left_6_in_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_6_in_{i}') for i in range(4)]
+        Kq_left_6_in_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_6_in_{i}') for i in range(1, 1 + 4)]
         Kq_left_6_in_value = self.mavrik_setup.Kq_left_6_in_val
         Kq_left_6_in_lookup_table = JaxNDInterpolator(Kq_left_6_in_breakpoints, Kq_left_6_in_value)
         Kq_left_6_in = Kq_left_6_in_lookup_table(jnp.array([
@@ -1312,7 +1309,7 @@ class MavrikAero:
         Kq_left_6_in_transformed = jnp.dot(wing_transform, Kq_left_6_in_padded * Kq_Scale_left_6_in)
 
         Kq_Scale_right_7_in = - 1.225 * u.RPM_right7In**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_right_7_in_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_7_in_{i}') for i in range(4)]
+        Kq_right_7_in_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_7_in_{i}') for i in range(1, 1 + 4)]
         Kq_right_7_in_value = self.mavrik_setup.Kq_right_7_in_val
         Kq_right_7_in_lookup_table = JaxNDInterpolator(Kq_right_7_in_breakpoints, Kq_right_7_in_value)
         Kq_right_7_in = Kq_right_7_in_lookup_table(jnp.array([
@@ -1322,7 +1319,7 @@ class MavrikAero:
         Kq_right_7_in_transformed = jnp.dot(wing_transform, Kq_right_7_in_padded * Kq_Scale_right_7_in)
 
         Kq_Scale_right_8 = - 1.225 * u.RPM_right8**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_right_8_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_8_{i}') for i in range(4)]
+        Kq_right_8_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_8_{i}') for i in range(1, 1 + 4)]
         Kq_right_8_value = self.mavrik_setup.Kq_right_8_val
         Kq_right_8_lookup_table = JaxNDInterpolator(Kq_right_8_breakpoints, Kq_right_8_value)
         Kq_right_8 = Kq_right_8_lookup_table(jnp.array([
@@ -1332,7 +1329,7 @@ class MavrikAero:
         Kq_right_8_transformed = jnp.dot(wing_transform, Kq_right_8_padded * Kq_Scale_right_8)
 
         Kq_Scale_right_9 = - 1.225 * u.RPM_right9**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_right_9_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_9_{i}') for i in range(4)]
+        Kq_right_9_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_9_{i}') for i in range(1, 1 + 4)]
         Kq_right_9_value = self.mavrik_setup.Kq_right_9_val
         Kq_right_9_lookup_table = JaxNDInterpolator(Kq_right_9_breakpoints, Kq_right_9_value)
         Kq_right_9 = Kq_right_9_lookup_table(jnp.array([
@@ -1342,7 +1339,7 @@ class MavrikAero:
         Kq_right_9_transformed = jnp.dot(wing_transform, Kq_right_9_padded * Kq_Scale_right_9)
 
         Kq_Scale_right_10 = - 1.225 * u.RPM_right10**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_right_10_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_10_{i}') for i in range(4)]
+        Kq_right_10_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_10_{i}') for i in range(1, 1 + 4)]
         Kq_right_10_value = self.mavrik_setup.Kq_right_10_val
         Kq_right_10_lookup_table = JaxNDInterpolator(Kq_right_10_breakpoints, Kq_right_10_value)
         Kq_right_10 = Kq_right_10_lookup_table(jnp.array([
@@ -1352,7 +1349,7 @@ class MavrikAero:
         Kq_right_10_transformed = jnp.dot(wing_transform, Kq_right_10_padded * Kq_Scale_right_10)
 
         Kq_Scale_right_11 = - 1.225 * u.RPM_right11**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_right_11_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_11_{i}') for i in range(4)]
+        Kq_right_11_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_11_{i}') for i in range(1, 1 + 4)]
         Kq_right_11_value = self.mavrik_setup.Kq_right_11_val
         Kq_right_11_lookup_table = JaxNDInterpolator(Kq_right_11_breakpoints, Kq_right_11_value)
         Kq_right_11 = Kq_right_11_lookup_table(jnp.array([
@@ -1362,7 +1359,7 @@ class MavrikAero:
         Kq_right_11_transformed = jnp.dot(wing_transform, Kq_right_11_padded * Kq_Scale_right_11)
 
         Kq_Scale_right_12_out = - 1.225 * u.RPM_right12Out**2 * 0.001349320375335 * 2.777777777777778e-4
-        Kq_right_12_out_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_12_out_{i}') for i in range(4)]
+        Kq_right_12_out_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_12_out_{i}') for i in range(1, 1 + 4)]
         Kq_right_12_out_value = self.mavrik_setup.Kq_right_12_out_val
         Kq_right_12_out_lookup_table = JaxNDInterpolator(Kq_right_12_out_breakpoints, Kq_right_12_out_value)
         Kq_right_12_out = Kq_right_12_out_lookup_table(jnp.array([
@@ -1389,7 +1386,7 @@ if __name__ == "__main__":
     # Example usage of MavrikAero class
 
     # Initialize MavrikSetup with appropriate values
-    mavrik_setup = MavrikSetup()
+    mavrik_setup = MavrikSetup(file_path="/Users/weichaozhou/Workspace/Mavrik_JAX/jax_mavrik/aero_export.mat")
 
     # Initialize MavrikAero with mass and setup
     mavrik_aero = MavrikAero(mass=1.0, mavrik_setup=mavrik_setup)
@@ -1397,9 +1394,14 @@ if __name__ == "__main__":
     # Define state variables
     state = StateVariables(
         Vx=10.0, Vy=0.0, Vz=0.0,
-        wx=0.0, wy=0.0, wz=0.0,
+        X=0.0, Y=0.0, Z=0.0,
         roll=0.0, pitch=0.0, yaw=0.0,
-        X=0.0, Y=0.0, Z=0.0
+        Vbx=0.0, Vby=0.0, Vbz=0.0,
+        wx=0.0, wy=0.0, wz=0.0,
+        dwdt_x=0.0, dwdt_y=0.0, dwdt_z=0.0,
+        ax=0.0, ay=0.0, az=0.0,
+        Fx=0.0, Fy=0.0, Fz=0.0,
+        L=0.0, M=0.0, N=0.0
     )
 
     # Define control inputs
