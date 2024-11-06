@@ -10,10 +10,10 @@ mdl = 'Mavrik_Reference_model.slx';
 t=[0.0];
 
 %% Initial state
-U=30; % trim speed
-eulerIn= [t,[0,4*pi/180,0]]; % trim attitude
-vnedIn= [t,[U*(cos(eulerIn(2))),U*sin(eulerIn(2)),0]]; % NED velocity
-pqrIn= [t,[0,0,0]]; % trim rates
+%U=30; % trim speed
+%eulerIn= [t,[0,4*pi/180,0]]; % trim attitude
+%vnedIn= [t,[U*(cos(eulerIn(2))),U*sin(eulerIn(2)),0]]; % NED velocity
+%pqrIn= [t,[0,0,0]]; % trim rates
 
 %% Initial Actuator settings
 RPM_tailLeft = 7500;

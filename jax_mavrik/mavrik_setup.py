@@ -4,7 +4,7 @@ import numpy as np
 
 
 class MavrikSetup:
-    def __init__(self, file_path: str):
+    def __init__(self, file_path: str = 'aero_export.mat'):
         # Constants with fixed values from the .m file
         # Constants with fixed values from the .m file
         self.S = 0.5744
@@ -89,6 +89,16 @@ class MavrikSetup:
         self.CY_elevator_tail_5 = CY_mat['CYelevator_tail.axes5.value']
         self.CY_elevator_tail_6 = CY_mat['CYelevator_tail.axes6.value']
         self.CY_elevator_tail_7 = CY_mat['CYelevator_tail.axes7.value']
+
+        # Flap Wing
+        self.CY_flap_wing_val = CY_mat['CYflap_wing.value']
+        self.CY_flap_wing_1 = CY_mat['CYflap_wing.axes1.value']
+        self.CY_flap_wing_2 = CY_mat['CYflap_wing.axes2.value']
+        self.CY_flap_wing_3 = CY_mat['CYflap_wing.axes3.value']
+        self.CY_flap_wing_4 = CY_mat['CYflap_wing.axes4.value']
+        self.CY_flap_wing_5 = CY_mat['CYflap_wing.axes5.value']
+        self.CY_flap_wing_6 = CY_mat['CYflap_wing.axes6.value']
+        self.CY_flap_wing_7 = CY_mat['CYflap_wing.axes7.value']
 
         # Rudder Tail
         self.CY_rudder_tail_val = CY_mat['CYrudder_tail.value']
@@ -870,7 +880,7 @@ class MavrikSetup:
 
 if __name__ == '__main__':
     # Usage Example with Perturbation and JIT Compatibility
-    file_path = '/Users/weichaozhou/Workspace/Mavrik_JAX/Mavrik/aero_export.mat'  # Replace with your .mat file path
+    file_path = 'aero_export.mat'  # Replace with your .mat file path
     mavrik_setup = MavrikSetup(file_path)
     for _ in range(100):
         # Example of accessing some attributes

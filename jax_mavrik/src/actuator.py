@@ -1,9 +1,11 @@
 from typing import NamedTuple
 
 import numpy as np
+import jax.numpy as jnp
 
 from jax import jit
 from jax_mavrik.src.utils.jax_types import FloatScalar
+from jax import vmap
 
 class ActuatorInput(NamedTuple):
     wing_tilt: FloatScalar
@@ -34,8 +36,19 @@ class ActuatorInutState(NamedTuple):
     p: FloatScalar
     q: FloatScalar
     r: FloatScalar
-    rho: FloatScalar
+    rho: FloatScalar = 1.225
 
+    
+    @staticmethod
+    def from_input(u: np.ndarray) -> 'ActuatorInutState':
+        U = jnp.sqrt(u[0]**2 + u[1]**2 + u[2]**2)
+        alpha = jnp.arctan2(u[2], u[0])
+        beta = jnp.arctan2(u[1], jnp.sqrt(u[0]**2 + u[2]**2))
+        p = u[3]
+        q = u[4]
+        r = u[5]
+        return ActuatorInutState(U=U, alpha=alpha, beta=beta, p=p, q=q, r=r)
+    
 class ActuatorOutput(NamedTuple):
     U: FloatScalar
     alpha: FloatScalar
@@ -161,6 +174,13 @@ if __name__ == '__main__':
         U=np.array([100.0, 110.0]), alpha=np.array([0.1, 0.2]), beta=np.array([0.05, 0.06]),
         p=np.array([0.01, 0.02]), q=np.array([0.02, 0.03]), r=np.array([0.03, 0.04]), rho=np.array([1.225, 1.226])
     )
+
+    # Example usage with from_input method
+    # Vectorize the from_input method
+    input_states = vmap(ActuatorInutState.from_input, in_axes=(0,))(np.array([
+        [100.0, 10.0, 5.0, 0.01, 0.02, 0.03],
+        [110.0, 11.0, 6.0, 0.02, 0.03, 0.04]
+    ])) 
 
     actuator_inputs = ActuatorInput(
         wing_tilt=np.array([0.1, 0.2]), tail_tilt=np.array([0.1, 0.2]), aileron=np.array([0.1, 0.2]),

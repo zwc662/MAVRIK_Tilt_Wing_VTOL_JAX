@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import NamedTuple
+from typing import NamedTuple, Float
 
 from jax_mavrik.src.utils.jax_types import FloatScalar
 import diffrax
@@ -9,8 +9,8 @@ from jax import jit
 
 
 class RigidBody(NamedTuple):
-    mass: FloatScalar
-    inertia: FloatScalar
+    mass: Float
+    inertia: Float
 
 class State(NamedTuple):
     position: FloatScalar
@@ -24,7 +24,7 @@ class SixDOFDynamics:
     the behavior of the MathWorks 6DOF block.
     """
 
-    def __init__(self, rigid_body: RigidBody):
+    def __init__(self, mass: Float, inertia: Float):
         """
         Initialize the 6DOF dynamics simulator.
 
@@ -67,11 +67,13 @@ class SixDOFDynamics:
         dpsi = q * sin(phi) / cos(theta) + r * cos(phi) / cos(theta)
          
         # Position and velocity in the NED frame
-        R = self._euler_to_dcm(array([phi, theta, psi]))
-        V_ned = R @ array([u, v, w])
+        #R = self._euler_to_dcm(array([phi, theta, psi]))
+        #V_ned = R @ array([u, v, w])
+        #return concatenate([V_ned, Vb_dot, array([dphi, dtheta, dpsi]), array([dp, dq, dr])])
 
+        Vxyz = array([u, v, w])
         # Return the derivative of the state vector
-        return concatenate([V_ned, Vb_dot, array([dphi, dtheta, dpsi]), array([dp, dq, dr])])
+        return concatenate([Vxyz, Vb_dot, array([dphi, dtheta, dpsi]), array([dp, dq, dr])])
 
     def _euler_to_dcm(self, euler_angles):
         """
