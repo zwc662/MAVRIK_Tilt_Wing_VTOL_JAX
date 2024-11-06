@@ -1,20 +1,22 @@
-
-import jax.numpy as jnp
 import matplotlib.pyplot as plt
-from diffrax import ODETerm, SaveAt, Tsit5, diffeqsolve 
-import jax
+import numpy as np
+from typing import NamedTuple
 
-class RigidBody:
-    def __init__(self, mass, inertia):
-        self.mass = mass
-        self.inertia = jnp.array(inertia)
+from jax_mavrik.src.utils.jax_types import FloatScalar
+import diffrax
+from jax import numpy as jnp
+from jax import jit
 
-class State:
-    def __init__(self, x, y, z, u, v, w, phi, theta, psi, p, q, r):
-        self.position = jnp.array([x, y, z])
-        self.velocity = jnp.array([u, v, w])
-        self.euler_angles = jnp.array([phi, theta, psi])
-        self.angular_velocity = jnp.array([p, q, r])
+
+class RigidBody(NamedTuple):
+    mass: FloatScalar
+    inertia: FloatScalar
+
+class State(NamedTuple):
+    position: FloatScalar
+    velocity: FloatScalar
+    euler_angles: FloatScalar
+    angular_velocity: FloatScalar
 
 class SixDOFDynamics:
     """
@@ -22,7 +24,7 @@ class SixDOFDynamics:
     the behavior of the MathWorks 6DOF block.
     """
 
-    def __init__(self, rigid_body):
+    def __init__(self, rigid_body: RigidBody):
         """
         Initialize the 6DOF dynamics simulator.
 
@@ -30,50 +32,48 @@ class SixDOFDynamics:
             rigid_body (RigidBody): Rigid body object containing mass and inertia.
         """
         self.rigid_body = rigid_body
-        self.ode_term = ODETerm(self._six_dof_dynamics)
 
-    def _six_dof_dynamics(self, t, state, args):
+    def _six_dof_dynamics(self, t, state, Fxyz, Mxyz):
         """
         Defines the 6DOF dynamics equations of motion based on Newton's and Euler's equations.
         
         Args:
             t (float): Time (not used in this system but required by diffrax).
-            state (jax.numpy.ndarray): Current state vector [x, y, z, u, v, w, phi, theta, psi, p, q, r].
+            state (numpy.ndarray): Current state vector [x, y, z, u, v, w, phi, theta, psi, p, q, r].
             args (tuple): Forces and moments acting on the rigid body (F_xyz, M_xyz).
         
         Returns:
-            jax.numpy.ndarray: Derivative of the state vector.
+            numpy.ndarray: Derivative of the state vector.
         """
-        Fxyz, Mxyz = args
+        
         x, y, z, u, v, w, phi, theta, psi, p, q, r = state
 
         # Translational motion (Newton's second law in the body frame)
-        ax = Fxyz[0] / self.rigid_body.mass
-        ay = Fxyz[1] / self.rigid_body.mass
-        az = Fxyz[2] / self.rigid_body.mass
-
-        # Compute body-frame linear accelerations
-        Vb_dot = jnp.array([ax, ay, az])
+        Vb_dot = Fxyz / self.rigid_body.mass
 
         # Rotational motion (Euler's equations in the body frame)
         Ix, Iy, Iz = self.rigid_body.inertia
         dp = (Mxyz[0] - (Iy - Iz) * q * r) / Ix
         dq = (Mxyz[1] - (Iz - Ix) * p * r) / Iy
         dr = (Mxyz[2] - (Ix - Iy) * p * q) / Iz
-
+        
+        array, cos, sin, tan, concatenate = np.asarray, np.cos, np.sin, np.tan, np.concatenate
+        if isinstance(state, jnp.ndarray):
+            array, cos, sin, tan, concatenate = jnp.asarray, jnp.cos, jnp.sin, jnp.tan, jnp.concatenate
+          
         # Euler angles rates
-        dphi = p + q * jnp.sin(phi) * jnp.tan(theta) + r * jnp.cos(phi) * jnp.tan(theta)
-        dtheta = q * jnp.cos(phi) - r * jnp.sin(phi)
-        dpsi = q * jnp.sin(phi) / jnp.cos(theta) + r * jnp.cos(phi) / jnp.cos(theta)
-
+        dphi = p + q * sin(phi) * tan(theta) + r * cos(phi) * tan(theta)
+        dtheta = q * cos(phi) - r * sin(phi)
+        dpsi = q * sin(phi) / cos(theta) + r * cos(phi) / cos(theta)
+         
         # Position and velocity in the NED frame
-        R = self._euler_to_dcm(phi, theta, psi)
-        V_ned = R @ jnp.array([u, v, w])
+        R = self._euler_to_dcm(array([phi, theta, psi]))
+        V_ned = R @ array([u, v, w])
 
         # Return the derivative of the state vector
-        return jnp.concatenate([V_ned, Vb_dot, jnp.array([dphi, dtheta, dpsi]), jnp.array([dp, dq, dr])])
+        return concatenate([V_ned, Vb_dot, array([dphi, dtheta, dpsi]), array([dp, dq, dr])])
 
-    def _euler_to_dcm(self, phi, theta, psi):
+    def _euler_to_dcm(self, euler_angles):
         """
         Calculates the Direction Cosine Matrix (DCM) from Euler angles.
         
@@ -85,8 +85,13 @@ class SixDOFDynamics:
         Returns:
             jax.numpy.ndarray: The 3x3 Direction Cosine Matrix (DCM).
         """
-        cos, sin = jnp.cos, jnp.sin
-        return jnp.array([
+        phi, theta, psi = euler_angles
+        cos, sin = np.cos, np.sin
+        array = np.asarray
+        if isinstance(euler_angles, jnp.ndarray):
+            array, cos, sin = jnp.asarray, jnp.cos, jnp.sin
+          
+        return array([
             [cos(theta) * cos(psi), cos(theta) * sin(psi), -sin(theta)],
             [sin(phi) * sin(theta) * cos(psi) - cos(phi) * sin(psi),
              sin(phi) * sin(theta) * sin(psi) + cos(phi) * cos(psi),
@@ -96,7 +101,7 @@ class SixDOFDynamics:
              cos(phi) * cos(theta)]
         ])
 
-    def run_simulation(self, initial_state, forces, moments, t0=0.0, t1=10.0, num_points=100):
+    def run_simulation(self, initial_state: State, forces: FloatScalar, moments: FloatScalar, t0=0.0, t1=10.0, num_points=100, method="RK4"):
         """
         Run the 6DOF dynamics simulation.
         
@@ -107,33 +112,51 @@ class SixDOFDynamics:
             t0 (float): Initial time of the simulation.
             t1 (float): Final time of the simulation.
             num_points (int): Number of points for evaluation.
+            method (str): Integration method ("RK4" or "diffrax").
         
         Returns:
             dict: A dictionary containing time and state history.
         """
-        initial_state_vector = jnp.concatenate([
+        initial_state_vector = np.concatenate([
             initial_state.position,
             initial_state.velocity,
-            initial_state.euler_angles,
+            initial_state.euler_angles, 
             initial_state.angular_velocity
         ])
         
-        saveat = SaveAt(ts=jnp.linspace(t0, t1, num_points))
-        
-        # Solve the ODE
-        solution = diffeqsolve(
-            self.ode_term,
-            solver=Tsit5(),
-            t0=t0,
-            t1=t1,
-            dt0=0.1,
-            y0=initial_state_vector,
-            args=(forces, moments),
-            saveat=saveat
-        )
+        dt = (t1 - t0) / num_points
+        time = np.linspace(t0, t1, num_points)
+        if method == "RK4":
+            states = np.zeros((num_points, len(initial_state_vector)))
+            states[0] = initial_state_vector
+            for i in range(1, num_points):
+                t = time[i-1]
+                state = states[i-1] 
+                forces, moments = np.asarray(forces), np.asarray(moments)
+                k1 = dt * self._six_dof_dynamics(t, state, forces, moments)
+                k2 = dt * self._six_dof_dynamics(t + dt/2, state + k1/2, forces, moments)
+                k3 = dt * self._six_dof_dynamics(t + dt/2, state + k2/2, forces, moments)
+                k4 = dt * self._six_dof_dynamics(t + dt, state + k3, forces, moments)
+                states[i] = state + (k1 + 2*k2 + 2*k3 + k4) / 6
 
-        return {"time": solution.ts, "states": solution.ys}
-        # Example Usage
+            return {"time": time, "states": states} # Return time and state history
+        elif method == "diffrax":
+            states = jnp.zeros((num_points, len(initial_state_vector)))
+            states = states.at[0].set(initial_state_vector)
+            def solve_dynamics(initial_state_vector, forces, moments, time):
+                def dynamics(t, y, args):
+                    forces, moments = jnp.asarray(args[0]), jnp.asarray(args[1])
+                    return jnp.array(self._six_dof_dynamics(t, y, forces, moments))
+
+                solver = diffrax.Tsit5()
+                term = diffrax.ODETerm(dynamics)
+                saveat = diffrax.SaveAt(ts=time)
+                sol = diffrax.diffeqsolve(term, solver, t0=t0, t1=t1, dt0=dt, y0=initial_state_vector, args=(forces, moments), saveat=saveat)
+                return jnp.array(sol.ys)
+
+            states = solve_dynamics(initial_state_vector, forces, moments, time)
+
+        return {"time": time, "states": states}
 
 if __name__ == "__main__":
     # Define constants and initial state
@@ -141,25 +164,43 @@ if __name__ == "__main__":
     inertia = [0.5, 0.5, 0.8]
     forces = [0, 0, -mass * 9.81]  # Gravity in the body frame
     moments = [0, 0, 0]  # No initial moments
-    initial_state = State(0, 0, 0, 30, 0, 0, 0, 0, 0, 0, 0, 0)
-
-    rigid_body = RigidBody(mass, inertia)
-    dynamics = SixDOFDynamics(rigid_body)
+    t0, t1 = 0.0, 100.0
+    initial_state = State(
+        position=np.array([0, 0, 0]),
+        velocity=np.array([30, 0, 0]),
+        euler_angles=np.array([0, 0, 0]),
+        angular_velocity=np.array([0, 0, 0])
+    )
     
-    results = dynamics.run_simulation(initial_state, forces, moments)
-
-    # Plot results (position over time as an example)
-    time = results["time"]
-    position = results["states"][:, :3]  # x, y, z positions
+    rigid_body = RigidBody(mass=mass, inertia=np.array(inertia))
+    dynamics = SixDOFDynamics(rigid_body)
+    results_rk4 = dynamics.run_simulation(initial_state, forces, moments, t0, t1, method="RK4")
+    # Plot results for RK4 method (position over time as an example)
+    time_rk4 = results_rk4["time"]
+    position_rk4 = results_rk4["states"][:, :3]  # x, y, z positions
 
     plt.figure()
-    plt.plot(time, position[:, 0], label="X Position")
-    plt.plot(time, position[:, 1], label="Y Position")
-    plt.plot(time, position[:, 2], label="Z Position")
+    plt.plot(time_rk4, position_rk4[:, 0], label="X Position (RK4)")
+    plt.plot(time_rk4, position_rk4[:, 1], label="Y Position (RK4)")
+    plt.plot(time_rk4, position_rk4[:, 2], label="Z Position (RK4)")
     plt.xlabel("Time [s]")
     plt.ylabel("Position [m]")
-    plt.title("6DOF Position Over Time")
+    plt.title("6DOF Position Over Time (RK4)")
     plt.legend()
     plt.show()
-    # Example Usage
- 
+     
+
+    results_diffrax = dynamics.run_simulation(initial_state, forces, moments, t0, t1, method="diffrax")
+    # Plot results for diffrax method (position over time as an example)
+    time_diffrax = results_diffrax["time"]
+    position_diffrax = results_diffrax["states"][:, :3]  # x, y, z positions
+
+    plt.figure()
+    plt.plot(time_diffrax, position_diffrax[:, 0], label="X Position (diffrax)")
+    plt.plot(time_diffrax, position_diffrax[:, 1], label="Y Position (diffrax)")
+    plt.plot(time_diffrax, position_diffrax[:, 2], label="Z Position (diffrax)")
+    plt.xlabel("Time [s]")
+    plt.ylabel("Position [m]")
+    plt.title("6DOF Position Over Time (diffrax)")
+    plt.legend()
+    plt.show()

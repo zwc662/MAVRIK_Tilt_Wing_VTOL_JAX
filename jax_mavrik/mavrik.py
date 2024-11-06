@@ -1,15 +1,12 @@
-
-import jax.numpy as jnp
-
 from jax_mavrik.mavrik_types import FULL_STATE_NX, OUTER_CONTROL_NU, FullState, OuterControl
 
 # mavrik.py
 
 from jax_mavrik.mavrik_types import ControlInputs, State
 from jax_mavrik.src.sixdof import SixDOFDynamics
-from jax_mavrik.mavrik_aero import MavrikAero
-import jax.numpy as jnp
-from typing import Dict, Any
+from jax_mavrik.src.mavrik_aero import MavrikAero
+ 
+from typing import Dict, Any, Tuple
 from diffrax import ODETerm, Tsit5, diffeqsolve
 
 class Mavrik:
