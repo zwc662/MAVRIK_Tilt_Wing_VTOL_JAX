@@ -70,6 +70,126 @@ class MavrikSetup:
         
         
         aero = AeroExport.load_mat(file_path)
+
+        CX_mat = aero.data['CX']
+
+        self.CX_aileron_wing_val = CX_mat['CXaileron_wing.value']
+        self.CX_aileron_wing_1 = CX_mat['CXaileron_wing.axes1.value']
+        self.CX_aileron_wing_2 = CX_mat['CXaileron_wing.axes2.value']
+        self.CX_aileron_wing_3 = CX_mat['CXaileron_wing.axes3.value']
+        self.CX_aileron_wing_4 = CX_mat['CXaileron_wing.axes4.value']
+        self.CX_aileron_wing_5 = CX_mat['CXaileron_wing.axes5.value']
+        self.CX_aileron_wing_6 = CX_mat['CXaileron_wing.axes6.value']
+        self.CX_aileron_wing_7 = CX_mat['CXaileron_wing.axes7.value']
+
+        self.CX_elevator_tail_val = CX_mat['CXelevator_tail.value']
+        self.CX_elevator_tail_1 = CX_mat['CXelevator_tail.axes1.value']
+        self.CX_elevator_tail_2 = CX_mat['CXelevator_tail.axes2.value']
+        self.CX_elevator_tail_3 = CX_mat['CXelevator_tail.axes3.value']
+        self.CX_elevator_tail_4 = CX_mat['CXelevator_tail.axes4.value']
+        self.CX_elevator_tail_5 = CX_mat['CXelevator_tail.axes5.value']
+        self.CX_elevator_tail_6 = CX_mat['CXelevator_tail.axes6.value']
+        self.CX_elevator_tail_7 = CX_mat['CXelevator_tail.axes7.value']
+
+        # Flap Wing
+        self.CX_flap_wing_val = CX_mat['CXflap_wing.value']
+        self.CX_flap_wing_1 = CX_mat['CXflap_wing.axes1.value']
+        self.CX_flap_wing_2 = CX_mat['CXflap_wing.axes2.value']
+        self.CX_flap_wing_3 = CX_mat['CXflap_wing.axes3.value']
+        self.CX_flap_wing_4 = CX_mat['CXflap_wing.axes4.value']
+        self.CX_flap_wing_5 = CX_mat['CXflap_wing.axes5.value']
+        self.CX_flap_wing_6 = CX_mat['CXflap_wing.axes6.value']
+        self.CX_flap_wing_7 = CX_mat['CXflap_wing.axes7.value']
+
+        # Rudder Tail
+        self.CX_rudder_tail_val = CX_mat['CXrudder_tail.value']
+        self.CX_rudder_tail_1 = CX_mat['CXrudder_tail.axes1.value']
+        self.CX_rudder_tail_2 = CX_mat['CXrudder_tail.axes2.value']
+        self.CX_rudder_tail_3 = CX_mat['CXrudder_tail.axes3.value']
+        self.CX_rudder_tail_4 = CX_mat['CXrudder_tail.axes4.value']
+        self.CX_rudder_tail_5 = CX_mat['CXrudder_tail.axes5.value']
+        self.CX_rudder_tail_6 = CX_mat['CXrudder_tail.axes6.value']
+        self.CX_rudder_tail_7 = CX_mat['CXrudder_tail.axes7.value']
+
+        # Tail
+        self.CX_tail_val = CX_mat['CXtail.value']
+        self.CX_tail_1 = CX_mat['CXtail.axes1.value']
+        self.CX_tail_2 = CX_mat['CXtail.axes2.value']
+        self.CX_tail_3 = CX_mat['CXtail.axes3.value']
+        self.CX_tail_4 = CX_mat['CXtail.axes4.value']
+        self.CX_tail_5 = CX_mat['CXtail.axes5.value']
+        self.CX_tail_6 = CX_mat['CXtail.axes6.value']
+
+        # Tail Damp p
+        self.CX_tail_damp_p_val = CX_mat['CXtail_damp_p.value']
+        self.CX_tail_damp_p_1 = CX_mat['CXtail_damp_p.axes1.value']
+        self.CX_tail_damp_p_2 = CX_mat['CXtail_damp_p.axes2.value']
+        self.CX_tail_damp_p_3 = CX_mat['CXtail_damp_p.axes3.value']
+        self.CX_tail_damp_p_4 = CX_mat['CXtail_damp_p.axes4.value']
+        self.CX_tail_damp_p_5 = CX_mat['CXtail_damp_p.axes5.value']
+        self.CX_tail_damp_p_6 = CX_mat['CXtail_damp_p.axes6.value']
+
+        # Tail Damp q
+        self.CX_tail_damp_q_val = CX_mat['CXtail_damp_q.value']
+        self.CX_tail_damp_q_1 = CX_mat['CXtail_damp_q.axes1.value']
+        self.CX_tail_damp_q_2 = CX_mat['CXtail_damp_q.axes2.value']
+        self.CX_tail_damp_q_3 = CX_mat['CXtail_damp_q.axes3.value']
+        self.CX_tail_damp_q_4 = CX_mat['CXtail_damp_q.axes4.value']
+        self.CX_tail_damp_q_5 = CX_mat['CXtail_damp_q.axes5.value']
+        self.CX_tail_damp_q_6 = CX_mat['CXtail_damp_q.axes6.value']
+
+        # Tail Damp r
+        self.CX_tail_damp_r_val = CX_mat['CXtail_damp_r.value']
+        self.CX_tail_damp_r_1 = CX_mat['CXtail_damp_r.axes1.value']
+        self.CX_tail_damp_r_2 = CX_mat['CXtail_damp_r.axes2.value']
+        self.CX_tail_damp_r_3 = CX_mat['CXtail_damp_r.axes3.value']
+        self.CX_tail_damp_r_4 = CX_mat['CXtail_damp_r.axes4.value']
+        self.CX_tail_damp_r_5 = CX_mat['CXtail_damp_r.axes5.value']
+        self.CX_tail_damp_r_6 = CX_mat['CXtail_damp_r.axes6.value']
+
+        # Wing
+        self.CX_wing_val = CX_mat['CXwing.value']
+        self.CX_wing_1 = CX_mat['CXwing.axes1.value']
+        self.CX_wing_2 = CX_mat['CXwing.axes2.value']
+        self.CX_wing_3 = CX_mat['CXwing.axes3.value']
+        self.CX_wing_4 = CX_mat['CXwing.axes4.value']
+        self.CX_wing_5 = CX_mat['CXwing.axes5.value']
+        self.CX_wing_6 = CX_mat['CXwing.axes6.value']
+
+        # Wing Damp p
+        self.CX_wing_damp_p_val = CX_mat['CXwing_damp_p.value']
+        self.CX_wing_damp_p_1 = CX_mat['CXwing_damp_p.axes1.value']
+        self.CX_wing_damp_p_2 = CX_mat['CXwing_damp_p.axes2.value']
+        self.CX_wing_damp_p_3 = CX_mat['CXwing_damp_p.axes3.value']
+        self.CX_wing_damp_p_4 = CX_mat['CXwing_damp_p.axes4.value']
+        self.CX_wing_damp_p_5 = CX_mat['CXwing_damp_p.axes5.value']
+        self.CX_wing_damp_p_6 = CX_mat['CXwing_damp_p.axes6.value']
+
+        # Wing Damp q
+        self.CX_wing_damp_q_val = CX_mat['CXwing_damp_q.value']
+        self.CX_wing_damp_q_1 = CX_mat['CXwing_damp_q.axes1.value']
+        self.CX_wing_damp_q_2 = CX_mat['CXwing_damp_q.axes2.value']
+        self.CX_wing_damp_q_3 = CX_mat['CXwing_damp_q.axes3.value']
+        self.CX_wing_damp_q_4 = CX_mat['CXwing_damp_q.axes4.value']
+        self.CX_wing_damp_q_5 = CX_mat['CXwing_damp_q.axes5.value']
+        self.CX_wing_damp_q_6 = CX_mat['CXwing_damp_q.axes6.value']
+
+        # Wing Damp r
+        self.CX_wing_damp_r_val = CX_mat['CXwing_damp_r.value']
+        self.CX_wing_damp_r_1 = CX_mat['CXwing_damp_r.axes1.value']
+        self.CX_wing_damp_r_2 = CX_mat['CXwing_damp_r.axes2.value']
+        self.CX_wing_damp_r_3 = CX_mat['CXwing_damp_r.axes3.value']
+        self.CX_wing_damp_r_4 = CX_mat['CXwing_damp_r.axes4.value']
+        self.CX_wing_damp_r_5 = CX_mat['CXwing_damp_r.axes5.value']
+        self.CX_wing_damp_r_6 = CX_mat['CXwing_damp_r.axes6.value']
+
+        # Hover Fuse
+        self.CX_hover_fuse_val = CX_mat['CXhover_fuse.value']
+        self.CX_hover_fuse_1 = CX_mat['CXhover_fuse.axes1.value']
+        self.CX_hover_fuse_2 = CX_mat['CXhover_fuse.axes2.value']
+        self.CX_hover_fuse_3 = CX_mat['CXhover_fuse.axes3.value']
+
+
         CY_mat = aero.data['CY']
 
         self.CY_aileron_wing_val = CY_mat['CYaileron_wing.value']
