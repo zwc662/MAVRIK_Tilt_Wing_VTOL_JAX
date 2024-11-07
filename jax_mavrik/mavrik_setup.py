@@ -36,36 +36,73 @@ class MavrikSetup:
         # Positions and transformations with negations for x and z
         self.tail_left_pos = np.array([1.26, -0.4506, 0.1295])
         self.RPM_tail_left_trans = np.array([-self.tail_left_pos[0] + self.CG[0], 
-                                            self.tail_left_pos[1] - self.CG[1], 
-                                            -self.tail_left_pos[2] + self.CG[2]])
+                            self.tail_left_pos[1] - self.CG[1], 
+                            -self.tail_left_pos[2] + self.CG[2]])
 
         self.tail_right_pos = np.array([1.26, 0.4506, 0.1295])
         self.RPM_tail_right_trans = np.array([-self.tail_right_pos[0] + self.CG[0], 
-                                            self.tail_right_pos[1] - self.CG[1], 
-                                            -self.tail_right_pos[2] + self.CG[2]])
+                            self.tail_right_pos[1] - self.CG[1], 
+                            -self.tail_right_pos[2] + self.CG[2]])
 
         self.left_out1_pos = np.array([0.5443, -1.4092, 0.04064])
         self.RPM_left_out1_trans = np.array([-self.left_out1_pos[0] + self.CG[0], 
-                                            self.left_out1_pos[1] - self.CG[1], 
-                                            -self.left_out1_pos[2] + self.CG[2]])
+                            self.left_out1_pos[1] - self.CG[1], 
+                            -self.left_out1_pos[2] + self.CG[2]])
 
         self.left_2_pos = np.array([0.5159, -1.1963, 0.04064])
         self.RPM_left_2_trans = np.array([-self.left_2_pos[0] + self.CG[0], 
-                                        self.left_2_pos[1] - self.CG[1], 
-                                        -self.left_2_pos[2] + self.CG[2]])
+                        self.left_2_pos[1] - self.CG[1], 
+                        -self.left_2_pos[2] + self.CG[2]])
 
         self.left_3_pos = np.array([0.5443, -0.9751, 0.04064])
         self.RPM_left_3_trans = np.array([-self.left_3_pos[0] + self.CG[0], 
-                                        self.left_3_pos[1] - self.CG[1], 
-                                        -self.left_3_pos[2] + self.CG[2]])
+                        self.left_3_pos[1] - self.CG[1], 
+                        -self.left_3_pos[2] + self.CG[2]])
 
-        # Repeat similarly for other transformations, applying the negations where necessary
+        self.left_4_pos = np.array([0.5159, -0.7539, 0.04064])
+        self.RPM_left_4_trans = np.array([-self.left_4_pos[0] + self.CG[0], 
+                        self.left_4_pos[1] - self.CG[1], 
+                        -self.left_4_pos[2] + self.CG[2]])
 
-        # For example:
+        self.left_5_pos = np.array([0.5443, -0.5448, 0.04064])
+        self.RPM_left_5_trans = np.array([-self.left_5_pos[0] + self.CG[0], 
+                        self.left_5_pos[1] - self.CG[1], 
+                        -self.left_5_pos[2] + self.CG[2]])
+
+        self.left_6_in_pos = np.array([0.5159, -0.3277, 0.04064])
+        self.RPM_left_6_in_trans = np.array([-self.left_6_in_pos[0] + self.CG[0], 
+                            self.left_6_in_pos[1] - self.CG[1], 
+                            -self.left_6_in_pos[2] + self.CG[2]])
+
+        self.right_7_in_pos = np.array([0.5159, 0.3277, 0.04064])
+        self.RPM_right_7_in_trans = np.array([-self.right_7_in_pos[0] + self.CG[0], 
+                            self.right_7_in_pos[1] - self.CG[1], 
+                            -self.right_7_in_pos[2] + self.CG[2]])
+
+        self.right_8_pos = np.array([0.5443, 0.5448, 0.04064])
+        self.RPM_right_8_trans = np.array([-self.right_8_pos[0] + self.CG[0], 
+                        self.right_8_pos[1] - self.CG[1], 
+                        -self.right_8_pos[2] + self.CG[2]])
+
+        self.right_9_pos = np.array([0.5159, 0.7539, 0.04064])
+        self.RPM_right_9_trans = np.array([-self.right_9_pos[0] + self.CG[0], 
+                        self.right_9_pos[1] - self.CG[1], 
+                        -self.right_9_pos[2] + self.CG[2]])
+
+        self.right_10_pos = np.array([0.5443, 0.9751, 0.04064])
+        self.RPM_right_10_trans = np.array([-self.right_10_pos[0] + self.CG[0], 
+                            self.right_10_pos[1] - self.CG[1], 
+                            -self.right_10_pos[2] + self.CG[2]])
+
+        self.right_11_pos = np.array([0.5159, 1.1963, 0.04064])
+        self.RPM_right_11_trans = np.array([-self.right_11_pos[0] + self.CG[0], 
+                            self.right_11_pos[1] - self.CG[1], 
+                            -self.right_11_pos[2] + self.CG[2]])
+
         self.right_12_out_pos = np.array([0.5443, 1.4092, 0.04064])
         self.RPM_right_12_out_trans = np.array([-self.right_12_out_pos[0] + self.CG[0], 
-                                                self.right_12_out_pos[1] - self.CG[1], 
-                                                -self.right_12_out_pos[2] + self.CG[2]])
+                            self.right_12_out_pos[1] - self.CG[1], 
+                            -self.right_12_out_pos[2] + self.CG[2]])
         
         
         

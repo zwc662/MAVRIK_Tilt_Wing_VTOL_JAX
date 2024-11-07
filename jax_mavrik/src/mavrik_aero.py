@@ -19,6 +19,7 @@ from jax_mavrik.mavrik_setup import MavrikSetup
 def linear_interpolate(v0, v1, weight):
     return v0 * (1 - weight) + v1 * weight
 
+@jit
 def get_index_and_weight(value, breakpoints):
     """
     Finds the index and weight for interpolation along a single dimension.
@@ -27,6 +28,7 @@ def get_index_and_weight(value, breakpoints):
     weight = (value - breakpoints[idx]) / (breakpoints[idx + 1] - breakpoints[idx])
     return idx, weight
 
+@jit
 def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: jnp.ndarray) -> float:
     """
     Perform n-dimensional interpolation using vectorized JAX operations.
@@ -110,8 +112,8 @@ class MavrikAero:
 
         F0, M0 = self.Ct(actuator_outputs)
 
-        F1 = self.CX(actuator_outputs)
-        F2 = self.CX(actuator_outputs)
+        F1 = self.Cx(actuator_outputs)
+        F2 = self.Cy(actuator_outputs)
         F3 = self.Cz(actuator_outputs)
 
         M1 = self.L(actuator_outputs)
@@ -124,7 +126,7 @@ class MavrikAero:
         Fz = F0.Fz + F1.Fz + F2.Fz + F3.Fz
 
         forces = Forces(Fx, Fy, Fz)
-        moments_by_forces = jnp.cross(jnp.array([state.X, state.Y, state.Z]), jnp.array([forces.Fx, forces.Fy, forces.Fz]))[0]
+        moments_by_forces = jnp.cross(jnp.array([state.X, state.Y, state.Z]), jnp.array([forces.Fx, forces.Fy, forces.Fz]))
        
         L = M0.L + M1.L + M2.L + M3.L + M5.L
         M = M0.M + M1.M + M2.M + M3.M + M5.M
@@ -146,7 +148,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         CX_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CX_aileron_wing_{i}') for i in range(1, 1 + 7)]
-        CX_aileron_wing_value = self.mavrik_setup.CX_aileron_wing_()
+        CX_aileron_wing_value = self.mavrik_setup.CX_aileron_wing_val
         CX_aileron_wing_lookup_table = JaxNDInterpolator(CX_aileron_wing_breakpoints, CX_aileron_wing_value)
         CX_aileron_wing = CX_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
@@ -293,7 +295,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         CY_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CY_aileron_wing_{i}') for i in range(1, 1 + 7)]
-        CY_aileron_wing_value = self.mavrik_setup.CY_aileron_wing_()
+        CY_aileron_wing_value = self.mavrik_setup.CY_aileron_wing_val
         CY_aileron_wing_lookup_table = JaxNDInterpolator(CY_aileron_wing_breakpoints, CY_aileron_wing_value)
         CY_aileron_wing = CY_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
@@ -441,7 +443,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         CZ_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'CZ_aileron_wing_{i}') for i in range(1, 1 + 7)]
-        CZ_aileron_wing_value = self.mavrik_setup.CZ_aileron_wing_()
+        CZ_aileron_wing_value = self.mavrik_setup.CZ_aileron_wing_val
         CZ_aileron_wing_lookup_table = JaxNDInterpolator(CZ_aileron_wing_breakpoints, CZ_aileron_wing_value)
         CZ_aileron_wing = CZ_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
@@ -590,7 +592,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         Cl_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cl_aileron_wing_{i}') for i in range(1, 1 + 7)]
-        Cl_aileron_wing_value = self.mavrik_setup.Cl_aileron_wing_()
+        Cl_aileron_wing_value = self.mavrik_setup.Cl_aileron_wing_val
         Cl_aileron_wing_lookup_table = JaxNDInterpolator(Cl_aileron_wing_breakpoints, Cl_aileron_wing_value)
         Cl_aileron_wing = Cl_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
@@ -739,7 +741,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         Cm_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cm_aileron_wing_{i}') for i in range(1, 1 + 7)]
-        Cm_aileron_wing_value = self.mavrik_setup.Cm_aileron_wing_()
+        Cm_aileron_wing_value = self.mavrik_setup.Cm_aileron_wing_val
         Cm_aileron_wing_lookup_table = JaxNDInterpolator(Cm_aileron_wing_breakpoints, Cm_aileron_wing_value)
         Cm_aileron_wing = Cm_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
@@ -888,7 +890,7 @@ class MavrikAero:
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         Cn_aileron_wing_breakpoints = [getattr(self.mavrik_setup, f'Cn_aileron_wing_{i}') for i in range(1, 1 + 7)]
-        Cn_aileron_wing_value = self.mavrik_setup.Cn_aileron_wing_()
+        Cn_aileron_wing_value = self.mavrik_setup.Cn_aileron_wing_val
         Cn_aileron_wing_lookup_table = JaxNDInterpolator(Cn_aileron_wing_breakpoints, Cn_aileron_wing_value)
         Cn_aileron_wing = Cn_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
@@ -1053,18 +1055,18 @@ class MavrikAero:
         Ct_tail_right_transformed = jnp.dot(tail_transform, Ct_tail_right_padded * Ct_Scale_tail_right) 
 
     
-        Ct_Scale_left_out = 1.225 * u.RPM_leftOut1**2 * 0.021071715921 * 2.777777777777778e-4 
-        Ct_left_out_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_out_{i}') for i in range(1, 1 + 4)]
-        Ct_left_out_value = self.mavrik_setup.Ct_left_out_val
-        Ct_left_out_lookup_table = JaxNDInterpolator(Ct_left_out_breakpoints, Ct_left_out_value)
-        Ct_left_out = Ct_left_out_lookup_table(jnp.array([
+        Ct_Scale_left_out1 = 1.225 * u.RPM_leftOut1**2 * 0.021071715921 * 2.777777777777778e-4 
+        Ct_left_out1_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_out_{i}') for i in range(1, 1 + 4)]
+        Ct_left_out1_value = self.mavrik_setup.Ct_left_out_val
+        Ct_left_out1_lookup_table = JaxNDInterpolator(Ct_left_out1_breakpoints, Ct_left_out1_value)
+        Ct_left_out1 = Ct_left_out1_lookup_table(jnp.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ])) 
-        Ct_left_out_padded = jnp.array([Ct_left_out, 0., 0.])
-        Ct_left_out_transformed = jnp.dot(wing_transform, Ct_left_out_padded * Ct_Scale_left_out)
+        Ct_left_out1_padded = jnp.array([Ct_left_out1, 0., 0.])
+        Ct_left_out1_transformed = jnp.dot(wing_transform, Ct_left_out1_padded * Ct_Scale_left_out1)
 
 
-        Ct_Scale_left_2 = 1.225 * u.RPM_leftOut2**2 * 0.021071715921 * 2.777777777777778e-4 
+        Ct_Scale_left_2 = 1.225 * u.RPM_left2**2 * 0.021071715921 * 2.777777777777778e-4 
         Ct_left_2_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_2_{i}') for i in range(1, 1 + 4)]
         Ct_left_2_value = self.mavrik_setup.Ct_left_2_val
         Ct_left_2_lookup_table = JaxNDInterpolator(Ct_left_2_breakpoints, Ct_left_2_value)
@@ -1076,7 +1078,7 @@ class MavrikAero:
 
 
 
-        Ct_Scale_left_3 = 1.225 * u.RPM_leftOut3**2 * 0.021071715921 * 2.777777777777778e-4 
+        Ct_Scale_left_3 = 1.225 * u.RPM_left3**2 * 0.021071715921 * 2.777777777777778e-4 
         Ct_left_3_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_3_{i}') for i in range(1, 1 + 4)]
         Ct_left_3_value = self.mavrik_setup.Ct_left_3_val
         Ct_left_3_lookup_table = JaxNDInterpolator(Ct_left_3_breakpoints, Ct_left_3_value)
@@ -1086,7 +1088,7 @@ class MavrikAero:
         Ct_left_3_padded = jnp.array([Ct_left_3, 0., 0.])
         Ct_left_3_transformed = jnp.dot(wing_transform, Ct_left_3_padded * Ct_Scale_left_3)
 
-        Ct_Scale_left_4 = 1.225 * u.RPM_leftOut4**2 * 0.021071715921 * 2.777777777777778e-4
+        Ct_Scale_left_4 = 1.225 * u.RPM_left4**2 * 0.021071715921 * 2.777777777777778e-4
         Ct_left_4_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_4_{i}') for i in range(1, 1 + 4)]
         Ct_left_4_value = self.mavrik_setup.Ct_left_4_val  
         Ct_left_4_lookup_table = JaxNDInterpolator(Ct_left_4_breakpoints, Ct_left_4_value)
@@ -1096,7 +1098,7 @@ class MavrikAero:
         Ct_left_4_padded = jnp.array([Ct_left_4, 0., 0.])
         Ct_left_4_transformed = jnp.dot(wing_transform, Ct_left_4_padded * Ct_Scale_left_4)
 
-        Ct_Scale_left_5 = 1.225 * u.RPM_leftOut5**2 * 0.021071715921 * 2.777777777777778e-4
+        Ct_Scale_left_5 = 1.225 * u.RPM_left5**2 * 0.021071715921 * 2.777777777777778e-4
         Ct_left_5_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_5_{i}') for i in range(1, 1 + 4)]
         Ct_left_5_value = self.mavrik_setup.Ct_left_5_val
         Ct_left_5_lookup_table = JaxNDInterpolator(Ct_left_5_breakpoints, Ct_left_5_value)
@@ -1108,25 +1110,25 @@ class MavrikAero:
 
 
 
-        Ct_Scale_left_6 = 1.225 * u.RPM_leftOut6**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_left_6_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_6_{i}') for i in range(1, 1 + 4)]
-        Ct_left_6_value = self.mavrik_setup.Ct_left_6_val
-        Ct_left_6_lookup_table = JaxNDInterpolator(Ct_left_6_breakpoints, Ct_left_6_value)
-        Ct_left_6 = Ct_left_6_lookup_table(jnp.array([
+        Ct_Scale_left_6_in = 1.225 * u.RPM_left6In**2 * 0.021071715921 * 2.777777777777778e-4
+        Ct_left_6_in_breakpoints = [getattr(self.mavrik_setup, f'Ct_left_6_in_{i}') for i in range(1, 1 + 4)]
+        Ct_left_6_in_value = self.mavrik_setup.Ct_left_6_in_val
+        Ct_left_6_in_lookup_table = JaxNDInterpolator(Ct_left_6_in_breakpoints, Ct_left_6_in_value)
+        Ct_left_6_in = Ct_left_6_in_lookup_table(jnp.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_left_6_padded = jnp.array([Ct_left_6, 0., 0.])
-        Ct_left_6_transformed = jnp.dot(wing_transform, Ct_left_6_padded * Ct_Scale_left_6)
+        Ct_left_6_in_padded = jnp.array([Ct_left_6_in, 0., 0.])
+        Ct_left_6_in_transformed = jnp.dot(wing_transform, Ct_left_6_in_padded * Ct_Scale_left_6_in)
 
-        Ct_Scale_right_7 = 1.225 * u.RPM_right7In**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_7_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_7_{i}') for i in range(1, 1 + 4)]
-        Ct_right_7_value = self.mavrik_setup.Ct_right_7_val
-        Ct_right_7_lookup_table = JaxNDInterpolator(Ct_right_7_breakpoints, Ct_right_7_value)
-        Ct_right_7 = Ct_right_7_lookup_table(jnp.array([
+        Ct_Scale_right_7_in = 1.225 * u.RPM_right7In**2 * 0.021071715921 * 2.777777777777778e-4
+        Ct_right_7_in_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_7_in_{i}') for i in range(1, 1 + 4)]
+        Ct_right_7_in_value = self.mavrik_setup.Ct_right_7_in_val
+        Ct_right_7_in_lookup_table = JaxNDInterpolator(Ct_right_7_in_breakpoints, Ct_right_7_in_value)
+        Ct_right_7 = Ct_right_7_in_lookup_table(jnp.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_7_padded = jnp.array([Ct_right_7, 0., 0.])
-        Ct_right_7_transformed = jnp.dot(wing_transform, Ct_right_7_padded * Ct_Scale_right_7)
+        Ct_right_7_in_padded = jnp.array([Ct_right_7, 0., 0.])
+        Ct_right_7_in_transformed = jnp.dot(wing_transform, Ct_right_7_in_padded * Ct_Scale_right_7_in)
 
         Ct_Scale_right_8 = 1.225 * u.RPM_right8**2 * 0.021071715921 * 2.777777777777778e-4
         Ct_right_8_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_8_{i}') for i in range(1, 1 + 4)]
@@ -1169,53 +1171,53 @@ class MavrikAero:
         Ct_right_11_transformed = jnp.dot(wing_transform, Ct_right_11_padded * Ct_Scale_right_11)
 
 
-        Ct_Scale_right_12 = 1.225 * u.RPM_right12Out**2 * 0.021071715921 * 2.777777777777778e-4
-        Ct_right_12_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_12_{i}') for i in range(1, 1 + 4)]
-        Ct_right_12_value = self.mavrik_setup.Ct_right_12_val
-        Ct_right_12_lookup_table = JaxNDInterpolator(Ct_right_12_breakpoints, Ct_right_12_value)
-        Ct_right_12 = Ct_right_12_lookup_table(jnp.array([
+        Ct_Scale_right_12_out = 1.225 * u.RPM_right12Out**2 * 0.021071715921 * 2.777777777777778e-4
+        Ct_right_12_out_breakpoints = [getattr(self.mavrik_setup, f'Ct_right_12_out_{i}') for i in range(1, 1 + 4)]
+        Ct_right_12_out_value = self.mavrik_setup.Ct_right_12_out_val
+        Ct_right_12_out_lookup_table = JaxNDInterpolator(Ct_right_12_out_breakpoints, Ct_right_12_out_value)
+        Ct_right_12 = Ct_right_12_out_lookup_table(jnp.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_12_padded = jnp.array([Ct_right_12, 0., 0.])
-        Ct_right_12_transformed = jnp.dot(wing_transform, Ct_right_12_padded * Ct_Scale_right_12)
+        Ct_right_12_out_padded = jnp.array([Ct_right_12, 0., 0.])
+        Ct_right_12_out_transformed = jnp.dot(wing_transform, Ct_right_12_out_padded * Ct_Scale_right_12_out)
 
         forces = Forces(
-            Ct_tail_left_transformed[0] + Ct_tail_right_transformed[0] + Ct_left_out_transformed[0] + Ct_left_2_transformed[0] + Ct_left_3_transformed[0] + 
-            Ct_left_4_transformed[0] + Ct_left_5_transformed[0] + Ct_left_6_transformed[0] + Ct_right_7_transformed[0] + Ct_right_8_transformed[0] + 
-            Ct_right_9_transformed[0] + Ct_right_10_transformed[0] + Ct_right_11_transformed[0] + Ct_right_12_transformed[0],
-            Ct_tail_left_transformed[1] + Ct_tail_right_transformed[1] + Ct_left_out_transformed[1] + Ct_left_2_transformed[1] + Ct_left_3_transformed[1] + 
-            Ct_left_4_transformed[1] + Ct_left_5_transformed[1] + Ct_left_6_transformed[1] + Ct_right_7_transformed[1] + Ct_right_8_transformed[1] + 
-            Ct_right_9_transformed[1] + Ct_right_10_transformed[1] + Ct_right_11_transformed[1] + Ct_right_12_transformed[1],
-            Ct_tail_left_transformed[2] + Ct_tail_right_transformed[2] + Ct_left_out_transformed[2] + Ct_left_2_transformed[2] + Ct_left_3_transformed[2] + 
-            Ct_left_4_transformed[2] + Ct_left_5_transformed[2] + Ct_left_6_transformed[2] + Ct_right_7_transformed[2] + Ct_right_8_transformed[2] + 
-            Ct_right_9_transformed[2] + Ct_right_10_transformed[2] + Ct_right_11_transformed[2] + Ct_right_12_transformed[2]
+            Ct_tail_left_transformed[0] + Ct_tail_right_transformed[0] + Ct_left_out1_transformed[0] + Ct_left_2_transformed[0] + Ct_left_3_transformed[0] + 
+            Ct_left_4_transformed[0] + Ct_left_5_transformed[0] + Ct_left_6_in_transformed[0] + Ct_right_7_in_transformed[0] + Ct_right_8_transformed[0] + 
+            Ct_right_9_transformed[0] + Ct_right_10_transformed[0] + Ct_right_11_transformed[0] + Ct_right_12_out_transformed[0],
+            Ct_tail_left_transformed[1] + Ct_tail_right_transformed[1] + Ct_left_out1_transformed[1] + Ct_left_2_transformed[1] + Ct_left_3_transformed[1] + 
+            Ct_left_4_transformed[1] + Ct_left_5_transformed[1] + Ct_left_6_in_transformed[1] + Ct_right_7_in_transformed[1] + Ct_right_8_transformed[1] + 
+            Ct_right_9_transformed[1] + Ct_right_10_transformed[1] + Ct_right_11_transformed[1] + Ct_right_12_out_transformed[1],
+            Ct_tail_left_transformed[2] + Ct_tail_right_transformed[2] + Ct_left_out1_transformed[2] + Ct_left_2_transformed[2] + Ct_left_3_transformed[2] + 
+            Ct_left_4_transformed[2] + Ct_left_5_transformed[2] + Ct_left_6_in_transformed[2] + Ct_right_7_in_transformed[2] + Ct_right_8_transformed[2] + 
+            Ct_right_9_transformed[2] + Ct_right_10_transformed[2] + Ct_right_11_transformed[2] + Ct_right_12_out_transformed[2]
             )
 
         Ct_tail_left_transformed = jnp.cross(self.mavrik_setup.RPM_tail_left_trans, Ct_tail_left_transformed)
         Ct_tail_right_transformed = jnp.cross(self.mavrik_setup.RPM_tail_right_trans, Ct_tail_right_transformed)
-        Ct_left_out_transformed = jnp.cross(self.mavrik_setup.RPM_left_out_trans, Ct_left_out_transformed)
+        Ct_left_out1_transformed = jnp.cross(self.mavrik_setup.RPM_left_out1_trans, Ct_left_out1_transformed)
         Ct_left_2_transformed = jnp.cross(self.mavrik_setup.RPM_left_2_trans, Ct_left_2_transformed)
         Ct_left_3_transformed = jnp.cross(self.mavrik_setup.RPM_left_3_trans, Ct_left_3_transformed)
         Ct_left_4_transformed = jnp.cross(self.mavrik_setup.RPM_left_4_trans, Ct_left_4_transformed)
         Ct_left_5_transformed = jnp.cross(self.mavrik_setup.RPM_left_5_trans, Ct_left_5_transformed)
-        Ct_left_6_transformed = jnp.cross(self.mavrik_setup.RPM_left_6_trans, Ct_left_6_transformed)
-        Ct_right_7_transformed = jnp.cross(self.mavrik_setup.RPM_right_7_trans, Ct_right_7_transformed)
+        Ct_left_6_in_transformed = jnp.cross(self.mavrik_setup.RPM_left_6_in_trans, Ct_left_6_in_transformed)
+        Ct_right_7_in_transformed = jnp.cross(self.mavrik_setup.RPM_right_7_in_trans, Ct_right_7_in_transformed)
         Ct_right_8_transformed = jnp.cross(self.mavrik_setup.RPM_right_8_trans, Ct_right_8_transformed)
         Ct_right_9_transformed = jnp.cross(self.mavrik_setup.RPM_right_9_trans, Ct_right_9_transformed)
         Ct_right_10_transformed = jnp.cross(self.mavrik_setup.RPM_right_10_trans, Ct_right_10_transformed)
         Ct_right_11_transformed = jnp.cross(self.mavrik_setup.RPM_right_11_trans, Ct_right_11_transformed)
-        Ct_right_12_transformed = jnp.cross(self.mavrik_setup.RPM_right_12_out_trans, Ct_right_12_transformed)
+        Ct_right_12_out_transformed = jnp.cross(self.mavrik_setup.RPM_right_12_out_trans, Ct_right_12_out_transformed)
 
         moments = Moments(
-            Ct_tail_left_transformed[0] + Ct_tail_right_transformed[0] + Ct_left_out_transformed[0] + Ct_left_2_transformed[0] + Ct_left_3_transformed[0] + 
-            Ct_left_4_transformed[0] + Ct_left_5_transformed[0] + Ct_left_6_transformed[0] + Ct_right_7_transformed[0] + Ct_right_8_transformed[0] + 
-            Ct_right_9_transformed[0] + Ct_right_10_transformed[0] + Ct_right_11_transformed[0] + Ct_right_12_transformed[0],
-            Ct_tail_left_transformed[1] + Ct_tail_right_transformed[1] + Ct_left_out_transformed[1] + Ct_left_2_transformed[1] + Ct_left_3_transformed[1] + 
-            Ct_left_4_transformed[1] + Ct_left_5_transformed[1] + Ct_left_6_transformed[1] + Ct_right_7_transformed[1] + Ct_right_8_transformed[1] + 
-            Ct_right_9_transformed[1] + Ct_right_10_transformed[1] + Ct_right_11_transformed[1] + Ct_right_12_transformed[1],
-            Ct_tail_left_transformed[2] + Ct_tail_right_transformed[2] + Ct_left_out_transformed[2] + Ct_left_2_transformed[2] + Ct_left_3_transformed[2] + 
-            Ct_left_4_transformed[2] + Ct_left_5_transformed[2] + Ct_left_6_transformed[2] + Ct_right_7_transformed[2] + Ct_right_8_transformed[2] + 
-            Ct_right_9_transformed[2] + Ct_right_10_transformed[2] + Ct_right_11_transformed[2] + Ct_right_12_transformed[2]
+            Ct_tail_left_transformed[0] + Ct_tail_right_transformed[0] + Ct_left_out1_transformed[0] + Ct_left_2_transformed[0] + Ct_left_3_transformed[0] + 
+            Ct_left_4_transformed[0] + Ct_left_5_transformed[0] + Ct_left_6_in_transformed[0] + Ct_right_7_in_transformed[0] + Ct_right_8_transformed[0] + 
+            Ct_right_9_transformed[0] + Ct_right_10_transformed[0] + Ct_right_11_transformed[0] + Ct_right_12_out_transformed[0],
+            Ct_tail_left_transformed[1] + Ct_tail_right_transformed[1] + Ct_left_out1_transformed[1] + Ct_left_2_transformed[1] + Ct_left_3_transformed[1] + 
+            Ct_left_4_transformed[1] + Ct_left_5_transformed[1] + Ct_left_6_in_transformed[1] + Ct_right_7_in_transformed[1] + Ct_right_8_transformed[1] + 
+            Ct_right_9_transformed[1] + Ct_right_10_transformed[1] + Ct_right_11_transformed[1] + Ct_right_12_out_transformed[1],
+            Ct_tail_left_transformed[2] + Ct_tail_right_transformed[2] + Ct_left_out1_transformed[2] + Ct_left_2_transformed[2] + Ct_left_3_transformed[2] + 
+            Ct_left_4_transformed[2] + Ct_left_5_transformed[2] + Ct_left_6_in_transformed[2] + Ct_right_7_in_transformed[2] + Ct_right_8_transformed[2] + 
+            Ct_right_9_transformed[2] + Ct_right_10_transformed[2] + Ct_right_11_transformed[2] + Ct_right_12_out_transformed[2]
             )
         
         return forces, moments
@@ -1368,7 +1370,7 @@ class MavrikAero:
         Kq_right_12_out_padded = jnp.array([Kq_right_12_out, 0., 0.])
         Kq_right_12_out_transformed = jnp.dot(wing_transform, Kq_right_12_out_padded * Kq_Scale_right_12_out)
 
-        moments = Moments(
+        return Moments(
             Kq_tail_left_transformed[0] + Kq_tail_right_transformed[0] + Kq_left_out_transformed[0] + Kq_left_2_transformed[0] + Kq_left_3_transformed[0] + 
             Kq_left_4_transformed[0] + Kq_left_5_transformed[0] + Kq_left_6_in_transformed[0] + Kq_right_7_in_transformed[0] + Kq_right_8_transformed[0] + 
             Kq_right_9_transformed[0] + Kq_right_10_transformed[0] + Kq_right_11_transformed[0] + Kq_right_12_out_transformed[0],
@@ -1379,7 +1381,7 @@ class MavrikAero:
             Kq_left_4_transformed[2] + Kq_left_5_transformed[2] + Kq_left_6_in_transformed[2] + Kq_right_7_in_transformed[2] + Kq_right_8_transformed[2] + 
             Kq_right_9_transformed[2] + Kq_right_10_transformed[2] + Kq_right_11_transformed[2] + Kq_right_12_out_transformed[2]
             )
-        
+         
 
 
 if __name__ == "__main__":

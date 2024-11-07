@@ -1,11 +1,13 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import NamedTuple, Float
+from typing import NamedTuple, Optional
+from jaxtyping import Float
 
 from jax_mavrik.src.utils.jax_types import FloatScalar
 import diffrax
 from jax import numpy as jnp
 from jax import jit
+from jax import lax
 
 
 class RigidBody(NamedTuple):
@@ -24,7 +26,7 @@ class SixDOFDynamics:
     the behavior of the MathWorks 6DOF block.
     """
 
-    def __init__(self, mass: Float, inertia: Float):
+    def __init__(self, rigid_body: RigidBody, dt: float = 0.01):
         """
         Initialize the 6DOF dynamics simulator.
 
@@ -32,6 +34,7 @@ class SixDOFDynamics:
             rigid_body (RigidBody): Rigid body object containing mass and inertia.
         """
         self.rigid_body = rigid_body
+        self.dt = dt
 
     def _six_dof_dynamics(self, t, state, Fxyz, Mxyz):
         """
@@ -102,8 +105,8 @@ class SixDOFDynamics:
              cos(phi) * sin(theta) * sin(psi) - sin(phi) * cos(psi),
              cos(phi) * cos(theta)]
         ])
-
-    def run_simulation(self, initial_state: State, forces: FloatScalar, moments: FloatScalar, t0=0.0, t1=10.0, num_points=100, method="RK4"):
+ 
+    def run_simulation(self, initial_state: State, forces: FloatScalar, moments: FloatScalar, t0=0.0, t1=0.01, method="RK4"):
         """
         Run the 6DOF dynamics simulation.
         
@@ -126,20 +129,23 @@ class SixDOFDynamics:
             initial_state.angular_velocity
         ])
         
-        dt = (t1 - t0) / num_points
+        num_points = jnp.ceil((t1 - t0) / self.dt).astype(int)
         time = np.linspace(t0, t1, num_points)
         if method == "RK4":
             states = np.zeros((num_points, len(initial_state_vector)))
             states[0] = initial_state_vector
-            for i in range(1, num_points):
-                t = time[i-1]
-                state = states[i-1] 
-                forces, moments = np.asarray(forces), np.asarray(moments)
-                k1 = dt * self._six_dof_dynamics(t, state, forces, moments)
-                k2 = dt * self._six_dof_dynamics(t + dt/2, state + k1/2, forces, moments)
-                k3 = dt * self._six_dof_dynamics(t + dt/2, state + k2/2, forces, moments)
-                k4 = dt * self._six_dof_dynamics(t + dt, state + k3, forces, moments)
-                states[i] = state + (k1 + 2*k2 + 2*k3 + k4) / 6
+            def rk4_step(state, t_forces_moments):
+                t, forces, moments = t_forces_moments
+                forces, moments = jnp.asarray(forces), jnp.asarray(moments)
+                k1 = self.dt * self._six_dof_dynamics(t, state, forces, moments)
+                k2 = self.dt * self._six_dof_dynamics(t + self.dt/2, state + k1/2, forces, moments)
+                k3 = self.dt * self._six_dof_dynamics(t + self.dt/2, state + k2/2, forces, moments)
+                k4 = self.dt * self._six_dof_dynamics(t + self.dt, state + k3, forces, moments)
+                new_state = state + (k1 + 2*k2 + 2*k3 + k4) / 6
+                return new_state, new_state
+
+            t_forces_moments = (time, jnp.tile(forces, (num_points, 1)), jnp.tile(moments, (num_points, 1)))
+            _, states = lax.scan(rk4_step, initial_state_vector, t_forces_moments)
 
             return {"time": time, "states": states} # Return time and state history
         elif method == "diffrax":
