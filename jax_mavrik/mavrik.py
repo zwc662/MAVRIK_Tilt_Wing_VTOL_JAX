@@ -10,13 +10,15 @@ import numpy as np
 from typing import Dict, Any, Tuple, Optional
 from diffrax import ODETerm, Tsit5, diffeqsolve
 import time
+import os
 
 import jax.numpy as jnp 
 
-
+current_file_path = os.path.dirname(os.path.abspath(__file__))
+mavrik_setup = MavrikSetup(file_path=os.path.join(current_file_path, "aero_export.mat"))
 
 class Mavrik:
-    def __init__(self, mass: float, inertia: Tuple[float, float, float], mavrik_setup: MavrikSetup, dt: float = 0.01):
+    def __init__(self, mass: float = 10.0, inertia: Tuple[float, float, float] = (0.5, 0.5, 0.8), dt: float = 0.01):
         self.simulator = Simulator(mass=mass, inertia=inertia, mavrik_setup=mavrik_setup)
         self.state_ndim = 27 
         self.control_ndim = 20
@@ -40,11 +42,7 @@ class Mavrik:
 
 # Example usage
 if __name__ == "__main__":
-    mavrik_setup = MavrikSetup(file_path="/Users/weichaozhou/Workspace/Mavrik_JAX/jax_mavrik/aero_export.mat")
-    mass = 10.0
-    inertia = (0.5, 0.5, 0.8)
-    dt = 0.01
-
+    
     initial_state = np.array([
         10.0, 0.0, 0.0,  # Vx, Vy, Vz
         0.0, 0.0, 0.0,   # X, Y, Z
@@ -69,7 +67,7 @@ if __name__ == "__main__":
         1000.0, 1000.0   # RPM_right11, RPM_right12Out
     ])
 
-    mavrik = Mavrik(mass, inertia, mavrik_setup, dt)
+    mavrik = Mavrik()
     mavrik.reset(initial_state)
 
     num_steps = 10
