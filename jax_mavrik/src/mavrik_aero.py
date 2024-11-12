@@ -81,20 +81,19 @@ class JaxNDInterpolator:
         return interpolator(inputs)
 
 class MavrikAero:
-    def __init__(self, mass: float, mavrik_setup: MavrikSetup):
-        self.mass = mass
+    def __init__(self, mavrik_setup: MavrikSetup):
         self.mavrik_setup = mavrik_setup
         
     def __call__(self, state: StateVariables, control: ControlInputs) -> Tuple[Forces, Moments]:
         # Calculate forces and moments using Mavrik Aero model
         actuator_input_state = ActuatorInutState(
-            U = jnp.sqrt(state.Vx**2 + state.Vy**2 + state.Vz**2),
-            alpha = jnp.arctan2(state.Vz, state.Vx),
-            beta = jnp.arctan2(state.Vy, jnp.sqrt(state.Vx**2 + state.Vz**2)),
+            U = jnp.sqrt(state.u**2 + state.v**2 + state.w**2),
+            alpha = jnp.arctan2(-state.w, state.u),
+            beta = jnp.arctan2(state.v, jnp.sqrt(state.u**2 + state.w**2)),
             p = state.wx,
             q = state.wy,
             r = state.wz
-        ) 
+        )
 
         actuator_inputs = ActuatorInput(
             wing_tilt=control.wing_tilt, tail_tilt=control.tail_tilt, aileron=control.aileron,

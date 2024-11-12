@@ -15,10 +15,10 @@ from jax_mavrik.src.mavrik_aero import MavrikAero
 from jax_mavrik.mavrik_setup import MavrikSetup
 
 class Simulator:
-    def __init__(self, mass: Float, inertia: Float, mavrik_setup: MavrikSetup):
-        rigid_body = RigidBody(mass=mass, inertia=inertia)
-        self.sixdof_model = SixDOFDynamics(rigid_body)
-        self.aero_model = MavrikAero(mass, mavrik_setup)
+    def __init__(self, mavrik_setup: MavrikSetup, method: str = 'RK4', fixed_step_size: float = 0.01):
+        rigid_body = RigidBody(mass=mavrik_setup.mass, inertia=mavrik_setup.inertia)
+        self.sixdof_model = SixDOFDynamics(rigid_body, method, fixed_step_size) 
+        self.aero_model = MavrikAero(mavrik_setup)
  
 
     def run(self, state: StateVariables, control: ControlInputs, dt: Float) -> StateVariables:
@@ -26,21 +26,21 @@ class Simulator:
         forces, moments = self.aero_model(state, control) 
         sixdof_state = SixDOFState(
             position=jnp.array([state.X, state.Y, state.Z]),
-            velocity=jnp.array([state.Vx, state.Vy, state.Vz]),
+            velocity=jnp.array([state.u, state.v, state.w]),
             euler_angles=jnp.array([state.roll, state.pitch, state.yaw]),
             angular_velocity=jnp.array([state.wx, state.wy, state.wz])
         )
         sixdof_forces = jnp.array([forces.Fx, forces.Fy, forces.Fz])
         sixdof_moments = jnp.array([moments.L, moments.M, moments.N])
         # Compute the state derivatives using 6DOF dynamics
-        results_rk4 = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, 0, dt, method="RK4")
+        results_rk4 = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, 0, dt)
         # Plot results for RK4 method (position over time as an example)
         nxt_sixdof_state = results_rk4["states"][-1]
         
         return state._replace(
-            Vx = nxt_sixdof_state[0],
-            Vy = nxt_sixdof_state[1],
-            Vz = nxt_sixdof_state[2],
+            u = nxt_sixdof_state[0],
+            v = nxt_sixdof_state[1],
+            w = nxt_sixdof_state[2],
             X = nxt_sixdof_state[3],
             Y = nxt_sixdof_state[4],
             Z = nxt_sixdof_state[5],
@@ -57,18 +57,16 @@ if __name__ == "__main__":
     mavrik_setup = MavrikSetup(file_path="/Users/weichaozhou/Workspace/Mavrik_JAX/jax_mavrik/aero_export.mat")
 
     # Define constants
-    mass = 10.0
-    inertia = [0.5, 0.5, 0.8]
-    dt = 0.01  # Time step
+    dt = 0.1  # Time step
 
     # Initialize Simulator
-    simulator = Simulator(mass=mass, inertia=inertia, mavrik_setup=mavrik_setup)
+    simulator = Simulator(mavrik_setup=mavrik_setup)
 
     # Define initial state variables
     state = StateVariables(
-        Vx=10.0, Vy=0.0, Vz=0.0,
+        u=29.927, v=0, w=2.0927,
         X=0.0, Y=0.0, Z=0.0,
-        roll=0.0, pitch=0.0, yaw=0.0,
+        roll=0.0, pitch=0.069813, yaw=0.0,
         Vbx=0.0, Vby=0.0, Vbz=0.0,
         wx=0.0, wy=0.0, wz=0.0,
         dwdt_x=0.0, dwdt_y=0.0, dwdt_z=0.0,

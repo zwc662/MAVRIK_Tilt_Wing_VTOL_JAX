@@ -7,8 +7,8 @@ from typing import NamedTuple
 
 
 arr = Union[jnp.ndarray, Array]
-State = Float[arr, "28"]   
-Control = Float[arr, "20"]
+StateArr = Float[arr, "28"]   
+ControlArr = Float[arr, "20"]
 
 
   
@@ -37,9 +37,9 @@ class ControlInputs(NamedTuple):
   
 
 class StateVariables(NamedTuple):  
-    Vx: Float  # Velocity in x direction
-    Vy: Float  # Velocity in y direction
-    Vz: Float  # Velocity in z direction
+    u: Float  # Velocity in NED frame1
+    v: Float  # Velocity in NED frame2
+    w: Float  # Velocity in NED frame3
     X: Float  # Position in x direction
     Y: Float  # Position in y direction
     Z: Float  # Position in z direction
