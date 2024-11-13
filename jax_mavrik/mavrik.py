@@ -38,11 +38,10 @@ class Mavrik:
      
 # Example usage
 if __name__ == "__main__":
-    
-    ## vned = np.asarray([29.92692151,  2.09269421,  0.        ])
+     
     U = 30  # trim speed
-    eulerIn = [0,0.069813,0]  #[0, 4 * np.pi / 180, 0]  # trim attitude (roll, pitch, yaw)
-    vnedIn = [30., 0., 0.] #np.array([U * np.cos(eulerIn[1]), U * np.sin(eulerIn[1]), 0])  # NED velocity
+    eulerIn = [0,0.069813,0]  # trim attitude (roll, pitch, yaw)
+    vnedIn = [30., 0., 0.]  # NED velocity
     # Convert NED velocity to body frame velocity
    
     state = np.array([
