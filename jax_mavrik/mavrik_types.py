@@ -13,6 +13,12 @@ ControlArr = Float[arr, "20"]
 
   
 class ControlInputs(NamedTuple):
+    wing_tilt: Float
+    tail_tilt: Float
+    aileron: Float
+    elevator: Float
+    flap: Float
+    rudder: Float
     RPM_tailLeft: Float
     RPM_tailRight: Float
     RPM_leftOut1: Float
@@ -27,13 +33,7 @@ class ControlInputs(NamedTuple):
     RPM_right10: Float
     RPM_right11: Float
     RPM_right12Out: Float
-    wing_tilt: Float
-    tail_tilt: Float
-    aileron: Float
-    elevator: Float
-    flap: Float
-    rudder: Float
-
+    
   
 
 class StateVariables(NamedTuple):  

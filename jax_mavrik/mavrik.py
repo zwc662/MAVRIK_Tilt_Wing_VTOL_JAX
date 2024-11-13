@@ -5,7 +5,7 @@ from jax_mavrik.mavrik_types import ControlInputs, StateArr, ControlArr
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs
 
 import numpy as np 
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional, Union
 from diffrax import ODETerm, Tsit5, diffeqsolve
 import time
 import os
@@ -21,35 +21,32 @@ class Mavrik:
         self.simulator = Simulator(mavrik_setup=mavrik_setup, method = method, fixed_step_size=fixed_step_size)
         self.state_ndim = 27 
         self.control_ndim = 20
-        self.state = None
         self.control = None 
         self.dt = dt
-
-    def reset(self, state: Optional[StateArr]):
-        assert state.shape == (self.state_ndim,)
-        self.state = StateVariables(*state)
-      
-    def step(self, control: ControlArr) -> jnp.ndarray:
-        if self.state is None or control is None:
+ 
+    def step(self, state: StateArr, control: ControlArr): # -> jnp.ndarray:
+        if state is None or control is None:
             raise ValueError("State and control must be initialized using reset() before calling step().")
         assert control.shape == (self.control_ndim,)
+        assert state.shape == (self.state_ndim,)
+        cur_state = StateVariables(*state)
         control_input = ControlInputs(*control)
-        self.state = self.simulator.run(self.state, control_input, self.dt)
+        nxt_state = self.simulator.run(cur_state, control_input, self.dt)
 
-        return np.asarray(self.state._asdict().values())
-    
-
+        info = {'state': cur_state, 'control': control_input, 'nxt_state': nxt_state}
+        return np.asarray(list(nxt_state._asdict().values())), info
+     
 # Example usage
 if __name__ == "__main__":
     
     ## vned = np.asarray([29.92692151,  2.09269421,  0.        ])
     U = 30  # trim speed
-    eulerIn = [0, 4 * np.pi / 180, 0]  # trim attitude (roll, pitch, yaw)
-    vnedIn = np.array([U * np.cos(eulerIn[1]), U * np.sin(eulerIn[1]), 0])  # NED velocity
+    eulerIn = [0,0.069813,0]  #[0, 4 * np.pi / 180, 0]  # trim attitude (roll, pitch, yaw)
+    vnedIn = [30., 0., 0.] #np.array([U * np.cos(eulerIn[1]), U * np.sin(eulerIn[1]), 0])  # NED velocity
     # Convert NED velocity to body frame velocity
    
-    initial_state = np.array([
-        *vnedIn,  # Vx, Vy, Vz
+    state = np.array([
+        *vnedIn,  # u, v, w
         0.0, 0.0, 0.0,   # X, Y, Z
         *eulerIn,   # roll, pitch, yaw
         0.0, 0.0, 0.0,   # Vbx, Vby, Vbz
@@ -73,19 +70,18 @@ if __name__ == "__main__":
     ])
 
     mavrik = Mavrik()
-    mavrik.reset(initial_state)
-
+    
     num_steps = int(0.1 / 0.01)
-    states = [initial_state]
+    states = [state]
     tot_runtime = 0.0
-    for _ in range(num_steps):
+    for i in range(num_steps):
         start_time = time.time()
-        state = mavrik.step(control)
+        state, info = mavrik.step(state, control)
         end_time = time.time()
         runtime = end_time - start_time
         tot_runtime += runtime
         states.append(state)
-        print(f"[Iteration runtime] Runtime: {tot_runtime:.6f} | Tot: {runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds | State: {state}")
+        print(f"[Iteration {i}] Runtime: {runtime:.6f} | Tot: {tot_runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds | State.: {info['state']}")
     
 
     #print("States:", states)

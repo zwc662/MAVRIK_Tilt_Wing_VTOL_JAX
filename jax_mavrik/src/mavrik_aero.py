@@ -86,10 +86,43 @@ class MavrikAero:
         
     def __call__(self, state: StateVariables, control: ControlInputs) -> Tuple[Forces, Moments]:
         # Calculate forces and moments using Mavrik Aero model
+        # Transform body frame velocities (u, v, w) to inertial frame velocities (Vx, Vy, Vz)
+        s_roll = jnp.sin(state.roll) #1
+        s_pitch = jnp.sin(state.pitch) #2
+        s_yaw = jnp.sin(state.yaw) #3
+
+        c_roll = jnp.cos(state.roll) #4
+        c_pitch = jnp.cos(state.pitch) #5
+        c_yaw = jnp.cos(state.yaw) #6
+
+        # Rotation matrix from body frame to inertial frame
+        R = jnp.array([
+            [c_pitch * c_yaw, c_pitch * s_yaw, -s_pitch],
+            [s_roll * s_pitch * c_yaw - c_roll * s_yaw, s_roll * s_pitch * s_yaw + c_roll * c_yaw, s_roll * c_pitch],
+            [c_roll * s_pitch * c_yaw + s_roll * s_yaw, c_roll * s_pitch * s_yaw - s_roll * c_yaw, c_roll * c_pitch]
+        ])
+        '''Not rotated
+        jnp.array([
+            [c_roll * c_pitch, c_pitch * s_roll, -s_pitch],
+            [s_yaw * s_pitch * c_roll - c_yaw * s_roll, s_yaw * s_pitch * s_roll + c_roll * c_yaw, s_yaw * c_pitch],
+            [c_yaw * s_pitch * c_roll + s_yaw * s_roll, c_yaw * s_pitch * s_roll - s_yaw * c_roll, c_yaw * c_pitch]
+        ]) 
+
+        '''
+
+        
+
+        # Body frame velocities
+        body_velocities = jnp.array([state.u, state.v, state.w])
+
+        # Inertial frame velocities
+        inertial_velocities = R @ body_velocities
+        Vx, Vy, Vz = inertial_velocities
+
         actuator_input_state = ActuatorInutState(
-            U = jnp.sqrt(state.u**2 + state.v**2 + state.w**2),
-            alpha = jnp.arctan2(-state.w, state.u),
-            beta = jnp.arctan2(state.v, jnp.sqrt(state.u**2 + state.w**2)),
+            U = jnp.sqrt(Vx**2 + Vy**2 + Vz**2),
+            alpha = jnp.arctan2(Vz, Vx),
+            beta = jnp.arctan2(Vy, jnp.sqrt(Vx**2 + Vz**2)),
             p = state.wx,
             q = state.wy,
             r = state.wz
@@ -108,30 +141,70 @@ class MavrikAero:
         )
 
         actuator_outputs: ActuatorOutput = actuate(actuator_input_state, actuator_inputs)
-
+        #print(f"{actuator_outputs=}")
         F0, M0 = self.Ct(actuator_outputs)
-
+        '''
+        for key, value in F0._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+            
+        for key, value in M0._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        '''
         F1 = self.Cx(actuator_outputs)
+        '''
+        for key, value in F1._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        ''' 
         F2 = self.Cy(actuator_outputs)
+        '''
+        for key, value in F2._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        '''
         F3 = self.Cz(actuator_outputs)
-
+        '''
+        for key, value in F3._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        '''
         M1 = self.L(actuator_outputs)
+        '''
+        for key, value in M1._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        '''
         M2 = self.M(actuator_outputs)
+        '''
+        for key, value in M2._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        '''
         M3 = self.N(actuator_outputs)
+        '''
+        for key, value in M3._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        '''
         M5 = self.Kq(actuator_outputs)
-
+        '''
+        for key, value in M5._asdict().items():
+            if jnp.isnan(value).any():
+                raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
+        '''
         Fx = F0.Fx + F1.Fx + F2.Fx + F3.Fx
         Fy = F0.Fy + F1.Fy + F2.Fy + F3.Fy
         Fz = F0.Fz + F1.Fz + F2.Fz + F3.Fz
 
         forces = Forces(Fx, Fy, Fz)
         moments_by_forces = jnp.cross(jnp.array([state.X, state.Y, state.Z]), jnp.array([forces.Fx, forces.Fy, forces.Fz]))
-       
-        L = M0.L + M1.L + M2.L + M3.L + M5.L
-        M = M0.M + M1.M + M2.M + M3.M + M5.M
-        N = M0.N + M1.N + M2.N + M3.N + M5.N
-
-        moments = Moments(L + moments_by_forces[0], M + moments_by_forces[1], N + moments_by_forces[2])
+        
+        moments = Moments(M0.L + M1.L + M2.L + M3.L + M5.L + moments_by_forces[0], 
+                          M0.M + M1.M + M2.M + M3.M + M5.M + moments_by_forces[1], 
+                          M0.N + M1.N + M2.N + M3.N + M5.N + moments_by_forces[2]
+                          )
 
         return forces, moments
 
@@ -880,7 +953,7 @@ class MavrikAero:
         )
 
     def N(self, u: ActuatorOutput) -> Moments:
-        Cn_Scale = 0.5744 * 0.28270 * u.Q
+        Cn_Scale = 0.5744 * 2.8270 * u.Q
         Cn_Scale_p = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.p
         Cn_Scale_q = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.q
         Cn_Scale_r = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.r
@@ -1237,7 +1310,7 @@ class MavrikAero:
         Kq_tail_left_transformed = jnp.dot(tail_transform, Kq_tail_left_padded * Kq_Scale_tail_left)
 
 
-        Kq_Scale_tail_right = - 1.225 * u.RPM_tailRight**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_tail_right = 1.225 * u.RPM_tailRight**2 * 0.001349320375335 * 2.777777777777778e-4
         Kq_tail_right_breakpoints = [getattr(self.mavrik_setup, f'Kq_tail_right_{i}') for i in range(1, 1 + 4)]
         Kq_tail_right_value = self.mavrik_setup.Kq_tail_right_val
         Kq_tail_right_lookup_table = JaxNDInterpolator(Kq_tail_right_breakpoints, Kq_tail_right_value)
@@ -1247,7 +1320,7 @@ class MavrikAero:
         Kq_tail_right_padded = jnp.array([Kq_tail_right, 0., 0.])
         Kq_tail_right_transformed = jnp.dot(tail_transform, Kq_tail_right_padded * Kq_Scale_tail_right)
 
-        Kq_Scale_left_out = - 1.225 * u.RPM_leftOut1**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_left_out = 1.225 * u.RPM_leftOut1**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_left_out_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_out_{i}') for i in range(1, 1 + 4)]
         Kq_left_out_value = self.mavrik_setup.Kq_left_out_val
         Kq_left_out_lookup_table = JaxNDInterpolator(Kq_left_out_breakpoints, Kq_left_out_value)
@@ -1257,7 +1330,7 @@ class MavrikAero:
         Kq_left_out_padded = jnp.array([Kq_left_out, 0., 0.])
         Kq_left_out_transformed = jnp.dot(wing_transform, Kq_left_out_padded * Kq_Scale_left_out)
 
-        Kq_Scale_left_2 = - 1.225 * u.RPM_left2**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_left_2 = - 1.225 * u.RPM_left2**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_left_2_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_2_{i}') for i in range(1, 1 + 4)]
         Kq_left_2_value = self.mavrik_setup.Kq_left_2_val
         Kq_left_2_lookup_table = JaxNDInterpolator(Kq_left_2_breakpoints, Kq_left_2_value)
@@ -1267,7 +1340,7 @@ class MavrikAero:
         Kq_left_2_padded = jnp.array([Kq_left_2, 0., 0.])
         Kq_left_2_transformed = jnp.dot(wing_transform, Kq_left_2_padded * Kq_Scale_left_2)
 
-        Kq_Scale_left_3 = - 1.225 * u.RPM_left3**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_left_3 = 1.225 * u.RPM_left3**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_left_3_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_3_{i}') for i in range(1, 1 + 4)]
         Kq_left_3_value = self.mavrik_setup.Kq_left_3_val
         Kq_left_3_lookup_table = JaxNDInterpolator(Kq_left_3_breakpoints, Kq_left_3_value)
@@ -1277,7 +1350,7 @@ class MavrikAero:
         Kq_left_3_padded = jnp.array([Kq_left_3, 0., 0.])
         Kq_left_3_transformed = jnp.dot(wing_transform, Kq_left_3_padded * Kq_Scale_left_3)
 
-        Kq_Scale_left_4 = - 1.225 * u.RPM_left4**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_left_4 = - 1.225 * u.RPM_left4**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_left_4_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_4_{i}') for i in range(1, 1 + 4)]
         Kq_left_4_value = self.mavrik_setup.Kq_left_4_val
         Kq_left_4_lookup_table = JaxNDInterpolator(Kq_left_4_breakpoints, Kq_left_4_value)
@@ -1288,7 +1361,7 @@ class MavrikAero:
         Kq_left_4_transformed = jnp.dot(wing_transform, Kq_left_4_padded * Kq_Scale_left_4)
 
 
-        Kq_Scale_left_5 = - 1.225 * u.RPM_left5**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_left_5 = 1.225 * u.RPM_left5**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_left_5_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_5_{i}') for i in range(1, 1 + 4)]
         Kq_left_5_value = self.mavrik_setup.Kq_left_5_val
         Kq_left_5_lookup_table = JaxNDInterpolator(Kq_left_5_breakpoints, Kq_left_5_value)
@@ -1299,7 +1372,7 @@ class MavrikAero:
         Kq_left_5_transformed = jnp.dot(wing_transform, Kq_left_5_padded * Kq_Scale_left_5)
 
 
-        Kq_Scale_left_6_in = - 1.225 * u.RPM_left6In**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_left_6_in = - 1.225 * u.RPM_left6In**2 *0.008028323765901 * 2.777777777777778e-4
         Kq_left_6_in_breakpoints = [getattr(self.mavrik_setup, f'Kq_left_6_in_{i}') for i in range(1, 1 + 4)]
         Kq_left_6_in_value = self.mavrik_setup.Kq_left_6_in_val
         Kq_left_6_in_lookup_table = JaxNDInterpolator(Kq_left_6_in_breakpoints, Kq_left_6_in_value)
@@ -1309,7 +1382,7 @@ class MavrikAero:
         Kq_left_6_in_padded = jnp.array([Kq_left_6_in, 0., 0.])
         Kq_left_6_in_transformed = jnp.dot(wing_transform, Kq_left_6_in_padded * Kq_Scale_left_6_in)
 
-        Kq_Scale_right_7_in = - 1.225 * u.RPM_right7In**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_right_7_in = - 1.225 * u.RPM_right7In**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_right_7_in_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_7_in_{i}') for i in range(1, 1 + 4)]
         Kq_right_7_in_value = self.mavrik_setup.Kq_right_7_in_val
         Kq_right_7_in_lookup_table = JaxNDInterpolator(Kq_right_7_in_breakpoints, Kq_right_7_in_value)
@@ -1319,7 +1392,7 @@ class MavrikAero:
         Kq_right_7_in_padded = jnp.array([Kq_right_7_in, 0., 0.])
         Kq_right_7_in_transformed = jnp.dot(wing_transform, Kq_right_7_in_padded * Kq_Scale_right_7_in)
 
-        Kq_Scale_right_8 = - 1.225 * u.RPM_right8**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_right_8 = 1.225 * u.RPM_right8**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_right_8_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_8_{i}') for i in range(1, 1 + 4)]
         Kq_right_8_value = self.mavrik_setup.Kq_right_8_val
         Kq_right_8_lookup_table = JaxNDInterpolator(Kq_right_8_breakpoints, Kq_right_8_value)
@@ -1329,7 +1402,7 @@ class MavrikAero:
         Kq_right_8_padded = jnp.array([Kq_right_8, 0., 0.])
         Kq_right_8_transformed = jnp.dot(wing_transform, Kq_right_8_padded * Kq_Scale_right_8)
 
-        Kq_Scale_right_9 = - 1.225 * u.RPM_right9**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_right_9 = - 1.225 * u.RPM_right9**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_right_9_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_9_{i}') for i in range(1, 1 + 4)]
         Kq_right_9_value = self.mavrik_setup.Kq_right_9_val
         Kq_right_9_lookup_table = JaxNDInterpolator(Kq_right_9_breakpoints, Kq_right_9_value)
@@ -1339,7 +1412,7 @@ class MavrikAero:
         Kq_right_9_padded = jnp.array([Kq_right_9, 0., 0.])
         Kq_right_9_transformed = jnp.dot(wing_transform, Kq_right_9_padded * Kq_Scale_right_9)
 
-        Kq_Scale_right_10 = - 1.225 * u.RPM_right10**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_right_10 = 1.225 * u.RPM_right10**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_right_10_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_10_{i}') for i in range(1, 1 + 4)]
         Kq_right_10_value = self.mavrik_setup.Kq_right_10_val
         Kq_right_10_lookup_table = JaxNDInterpolator(Kq_right_10_breakpoints, Kq_right_10_value)
@@ -1349,7 +1422,7 @@ class MavrikAero:
         Kq_right_10_padded = jnp.array([Kq_right_10, 0., 0.])
         Kq_right_10_transformed = jnp.dot(wing_transform, Kq_right_10_padded * Kq_Scale_right_10)
 
-        Kq_Scale_right_11 = - 1.225 * u.RPM_right11**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_right_11 = - 1.225 * u.RPM_right11**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_right_11_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_11_{i}') for i in range(1, 1 + 4)]
         Kq_right_11_value = self.mavrik_setup.Kq_right_11_val
         Kq_right_11_lookup_table = JaxNDInterpolator(Kq_right_11_breakpoints, Kq_right_11_value)
@@ -1359,7 +1432,7 @@ class MavrikAero:
         Kq_right_11_padded = jnp.array([Kq_right_11, 0., 0.])
         Kq_right_11_transformed = jnp.dot(wing_transform, Kq_right_11_padded * Kq_Scale_right_11)
 
-        Kq_Scale_right_12_out = - 1.225 * u.RPM_right12Out**2 * 0.001349320375335 * 2.777777777777778e-4
+        Kq_Scale_right_12_out = 1.225 * u.RPM_right12Out**2 * 0.008028323765901 * 2.777777777777778e-4
         Kq_right_12_out_breakpoints = [getattr(self.mavrik_setup, f'Kq_right_12_out_{i}') for i in range(1, 1 + 4)]
         Kq_right_12_out_value = self.mavrik_setup.Kq_right_12_out_val
         Kq_right_12_out_lookup_table = JaxNDInterpolator(Kq_right_12_out_breakpoints, Kq_right_12_out_value)

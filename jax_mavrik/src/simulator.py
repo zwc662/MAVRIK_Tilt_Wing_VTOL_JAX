@@ -15,7 +15,7 @@ from jax_mavrik.src.mavrik_aero import MavrikAero
 from jax_mavrik.mavrik_setup import MavrikSetup
 
 class Simulator:
-    def __init__(self, mavrik_setup: MavrikSetup, method: str = 'RK4', fixed_step_size: float = 0.01):
+    def __init__(self, mavrik_setup: MavrikSetup, method: str = 'diffrax', fixed_step_size: float = 0.01):
         rigid_body = RigidBody(mass=mavrik_setup.mass, inertia=mavrik_setup.inertia)
         self.sixdof_model = SixDOFDynamics(rigid_body, method, fixed_step_size) 
         self.aero_model = MavrikAero(mavrik_setup)
@@ -33,11 +33,9 @@ class Simulator:
         sixdof_forces = jnp.array([forces.Fx, forces.Fy, forces.Fz])
         sixdof_moments = jnp.array([moments.L, moments.M, moments.N])
         # Compute the state derivatives using 6DOF dynamics
-        results_rk4 = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, 0, dt)
-        # Plot results for RK4 method (position over time as an example)
-        nxt_sixdof_state = results_rk4["states"][-1]
+        nxt_sixdof_state = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, 0, dt)["states"][-1]
         
-        return state._replace(
+        nxt_state = state._replace(
             u = nxt_sixdof_state[0],
             v = nxt_sixdof_state[1],
             w = nxt_sixdof_state[2],
@@ -51,6 +49,7 @@ class Simulator:
             wy = nxt_sixdof_state[10],
             wz = nxt_sixdof_state[11],
         )
+        return nxt_state
 
 if __name__ == "__main__":
     # Initialize MavrikSetup with appropriate values
@@ -79,13 +78,13 @@ if __name__ == "__main__":
     control = ControlInputs(
         wing_tilt=0.0, tail_tilt=0.0, aileron=0.0,
         elevator=0.0, flap=0.0, rudder=0.0,
-        RPM_tailLeft=1000.0, RPM_tailRight=1000.0,
-        RPM_leftOut1=1000.0, RPM_left2=1000.0,
-        RPM_left3=1000.0, RPM_left4=1000.0,
-        RPM_left5=1000.0, RPM_left6In=1000.0,
-        RPM_right7In=1000.0, RPM_right8=1000.0,
-        RPM_right9=1000.0, RPM_right10=1000.0,
-        RPM_right11=1000.0, RPM_right12Out=1000.0
+        RPM_tailLeft=7500, RPM_tailRight=7500,
+        RPM_leftOut1=7500, RPM_left2=7500,
+        RPM_left3=7500, RPM_left4=7500,
+        RPM_left5=7500, RPM_left6In=7500,
+        RPM_right7In=7500, RPM_right8=7500,
+        RPM_right9=7500, RPM_right10=7500,
+        RPM_right11=7500, RPM_right12Out=7500
     )
 
     # Run the simulation for a certain number of steps
@@ -102,9 +101,9 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     positions = np.array([state[:3] for state in states[:-1]])
     plt.figure()
-    plt.plot(times, positions[:, 0], label="X Position (RK4)")
-    plt.plot(times, positions[:, 1], label="Y Position (RK4)")
-    plt.plot(times, positions[:, 2], label="Z Position (RK4)")
+    plt.plot(times, positions[:, 3], label="X Position (RK4)")
+    plt.plot(times, positions[:, 4], label="Y Position (RK4)")
+    plt.plot(times, positions[:, 5], label="Z Position (RK4)")
     plt.xlabel("Time [s]")
     plt.ylabel("Position [m]")
     plt.title("6DOF Position Over Time (RK4)")
