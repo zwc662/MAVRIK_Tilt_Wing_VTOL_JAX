@@ -1,5 +1,6 @@
 import scipy.io
 import pickle 
+import jax.numpy as jnp
 import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -82,3 +83,36 @@ def pickle2pd(file_path):
 
         return data_df
 
+
+def euler_to_dcm(roll, pitch, yaw):
+    """
+    Calculates the Direction Cosine Matrix (DCM) from Euler angles.
+    
+    Args:
+        phi (float): Roll angle.
+        theta (float): Pitch angle.
+        psi (float): Yaw angle.
+    
+    Returns:
+        jax.numpy.ndarray: The 3x3 Direction Cosine Matrix (DCM).
+    """
+    
+    # phi, theta, psi = euler_angles
+    cos, sin =jnp.cos, jnp.sin
+    array = jnp.asarray
+    
+        
+    s_roll = sin(roll) #1
+    s_pitch = sin(pitch) #2
+    s_yaw = sin(yaw) #3
+
+    c_roll = cos(roll) #4
+    c_pitch = cos(pitch) #5
+    c_yaw = cos(yaw) #6
+
+    # Rotation matrix from body frame to inertial frame
+    return jnp.array([
+        [c_pitch * c_yaw, c_pitch * s_yaw, -s_pitch],
+        [s_roll * s_pitch * c_yaw - c_roll * s_yaw, s_roll * s_pitch * s_yaw + c_roll * c_yaw, s_roll * c_pitch],
+        [c_roll * s_pitch * c_yaw + s_roll * s_yaw, c_roll * s_pitch * s_yaw - s_roll * c_yaw, c_roll * c_pitch]
+    ])

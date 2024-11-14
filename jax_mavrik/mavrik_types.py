@@ -7,12 +7,18 @@ from typing import NamedTuple
 
 
 arr = Union[jnp.ndarray, Array]
-State = Float[arr, "28"]   
-Control = Float[arr, "20"]
+StateArr = Float[arr, "21"]   
+ControlArr = Float[arr, "20"]
 
 
   
 class ControlInputs(NamedTuple):
+    wing_tilt: Float
+    tail_tilt: Float
+    aileron: Float
+    elevator: Float
+    flap: Float
+    rudder: Float
     RPM_tailLeft: Float
     RPM_tailRight: Float
     RPM_leftOut1: Float
@@ -27,38 +33,32 @@ class ControlInputs(NamedTuple):
     RPM_right10: Float
     RPM_right11: Float
     RPM_right12Out: Float
-    wing_tilt: Float
-    tail_tilt: Float
-    aileron: Float
-    elevator: Float
-    flap: Float
-    rudder: Float
-
+    
   
 
 class StateVariables(NamedTuple):  
-    Vx: Float  # Velocity in x direction
-    Vy: Float  # Velocity in y direction
-    Vz: Float  # Velocity in z direction
-    X: Float  # Position in x direction
-    Y: Float  # Position in y direction
-    Z: Float  # Position in z direction
+    VXe: Float  # Velocity in NED frame1
+    VYe: Float  # Velocity in NED frame2
+    VZe: Float  # Velocity in NED frame3
+    Xe: Float  # Position in x direction
+    Ye: Float  # Position in y direction
+    Ze: Float  # Position in z direction
     roll: Float  # Roll angle
     pitch: Float  # Pitch angle
     yaw: Float  # Yaw angle
     # DCM: np.ndarray  # Direction Cosine Matrix, np.array([[3x3]]) # If using xyz coordinate, there is no need for NED frame
-    Vbx: Float  # Body-frame velocity in x direction
-    Vby: Float  # Body-frame velocity in y direction
-    Vbz: Float  # Body-frame velocity in z direction
-    wx: Float  # Angular velocity in x direction
-    wy: Float  # Angular velocity in y direction
-    wz: Float  # Angular velocity in z direction
-    dwdt_x: Float  # Angular acceleration in x direction
-    dwdt_y: Float  # Angular acceleration in y direction
-    dwdt_z: Float  # Angular acceleration in z direction
-    ax: Float  # Linear acceleration in x direction
-    ay: Float  # Linear acceleration in y direction
-    az: Float  # Linear acceleration in z direction
+    u: Float  # Body-frame velocity in x direction
+    v: Float  # Body-frame velocity in y direction
+    w: Float  # Body-frame velocity in z direction
+    p: Float  # Angular velocity in x direction
+    q: Float  # Angular velocity in y direction
+    r: Float  # Angular velocity in z direction
+    #pdot: Float  # Angular acceleration in x direction
+    #qdot: Float  # Angular acceleration in y direction
+    #rdot: Float  # Angular acceleration in z direction
+    #udot: Float  # Linear acceleration in x direction
+    #vdot: Float  # Linear acceleration in y direction
+    #wdot: Float  # Linear acceleration in z direction
     Fx: Float  # Force in x direction
     Fy: Float  # Force in y direction
     Fz: Float  # Force in z direction
@@ -68,9 +68,9 @@ class StateVariables(NamedTuple):
 
 
 class AeroState(NamedTuple):
-    Vx: Float
-    Vy: Float
-    Vz: Float
+    VXe: Float
+    VYe: Float
+    VZe: Float
     roll: Float
     pitch: Float
     yaw: Float

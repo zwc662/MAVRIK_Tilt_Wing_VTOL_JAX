@@ -19,10 +19,15 @@ pip install -e .
 ## Quickstart
 ```python
     from jax_marik.mavrik import Mavrik
-    initial_state = np.array([
-        10.0, 0.0, 0.0,  # Vx, Vy, Vz
+    U = 30  # trim speed
+    eulerIn = [0,0.069813,0]  # trim attitude (roll, pitch, yaw)
+    vnedIn = [30., 0., 0.]  # NED velocity
+    # Convert NED velocity to body frame velocity
+   
+    state = np.array([
+        *vnedIn,  # u, v, w
         0.0, 0.0, 0.0,   # X, Y, Z
-        0.0, 0.0, 0.0,   # roll, pitch, yaw
+        *eulerIn,   # roll, pitch, yaw
         0.0, 0.0, 0.0,   # Vbx, Vby, Vbz
         0.0, 0.0, 0.0,   # wx, wy, wz
         0.0, 0.0, 0.0,   # dwdt_x, dwdt_y, dwdt_z
@@ -34,29 +39,29 @@ pip install -e .
     control = np.array([
         0.0, 0.0, 0.0,  # wing_tilt, tail_tilt, aileron
         0.0, 0.0, 0.0,  # elevator, flap, rudder
-        1000.0, 1000.0,  # RPM_tailLeft, RPM_tailRight
-        1000.0, 1000.0,  # RPM_leftOut1, RPM_left2
-        1000.0, 1000.0,  # RPM_left3, RPM_left4
-        1000.0, 1000.0,  # RPM_left5, RPM_left6In
-        1000.0, 1000.0,  # RPM_right7In, RPM_right8
-        1000.0, 1000.0,  # RPM_right9, RPM_right10
-        1000.0, 1000.0   # RPM_right11, RPM_right12Out
+        7500.0, 7500.0,  # RPM_tailLeft, RPM_tailRight
+        7500.0, 7500.0,  # RPM_leftOut1, RPM_left2
+        7500.0, 7500.0,  # RPM_left3, RPM_left4
+        7500.0, 7500.0,  # RPM_left5, RPM_left6In
+        7500.0, 7500.0,  # RPM_right7In, RPM_right8
+        7500.0, 7500.0,  # RPM_right9, RPM_right10
+        7500.0, 7500.0   # RPM_right11, RPM_right12Out
     ])
 
     mavrik = Mavrik()
-    mavrik.reset(initial_state)
-
-    num_steps = 10
-    states = [initial_state]
-    start_time = time.time()
-    for _ in range(num_steps):
-        state = mavrik.step(control)
+    
+    num_steps = int(0.1 / 0.01)
+    states = [state]
+    tot_runtime = 0.0
+    for i in range(num_steps):
+        start_time = time.time()
+        state, info = mavrik.step(state, control)
+        end_time = time.time()
+        runtime = end_time - start_time
+        tot_runtime += runtime
         states.append(state)
-    end_time = time.time()
-    runtime = end_time - start_time
-    print(f"[Iteration runtime] Tot: {runtime:.6f} seconds | Avg: {runtime / num_steps:.6f} seconds")
-
-    print("States:", states)
+        print(f"[Iteration {i}] Runtime: {runtime:.6f} | Tot: {tot_runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds | State.: {info['state']}")
+    
 ```
  
 ## Acknowledge
