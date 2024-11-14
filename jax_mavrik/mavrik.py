@@ -19,7 +19,7 @@ class Mavrik:
     def __init__(self, mavrik_setup: Optional[MavrikSetup] = None, dt: float = 0.01, method: str = 'RK4', fixed_step_size: float = 0.01):
         mavrik_setup = mavrik_setup if mavrik_setup is not None else _MAVRIK_SETUP_
         self.simulator = Simulator(mavrik_setup=mavrik_setup, method = method, fixed_step_size=fixed_step_size)
-        self.state_ndim = 27 
+        self.state_ndim = 21 
         self.control_ndim = 20
         self.control = None 
         self.dt = dt
@@ -45,13 +45,11 @@ if __name__ == "__main__":
     # Convert NED velocity to body frame velocity
    
     state = np.array([
-        *vnedIn,  # u, v, w
-        0.0, 0.0, 0.0,   # X, Y, Z
-        *eulerIn,   # roll, pitch, yaw
-        0.0, 0.0, 0.0,   # Vbx, Vby, Vbz
-        0.0, 0.0, 0.0,   # wx, wy, wz
-        0.0, 0.0, 0.0,   # dwdt_x, dwdt_y, dwdt_z
-        0.0, 0.0, 0.0,   # ax, ay, az
+        *vnedIn,  # VXe, VYe, VZe
+        0.0, 0.0, 0.0,  # Xe Ye Ze
+        29.9269, 0.0, 2.0927, # u v w
+        *eulerIn,   # roll, pitch, yaw 
+        0.0, 0.0, 0.0,   # p, q, r
         0.0, 0.0, 0.0,   # Fx, Fy, Fz
         0.0, 0.0, 0.0    # L, M, N
     ])

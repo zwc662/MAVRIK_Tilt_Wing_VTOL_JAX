@@ -7,7 +7,7 @@ from jax_mavrik.mavrik_types import StateVariables, ControlInputs
 from jax_mavrik.src.sixdof import (
     SixDOFDynamics, 
     RigidBody, 
-    State as SixDOFState
+    SixDOFState
 ) 
 from jax import jit
 
@@ -23,12 +23,13 @@ class Simulator:
 
     def run(self, state: StateVariables, control: ControlInputs, dt: Float) -> StateVariables:
         # Calculate forces and moments using Mavrik Aero model
-        forces, moments = self.aero_model(state, control) 
+        forces, moments, _ = self.aero_model(state, control) 
         sixdof_state = SixDOFState(
-            position=jnp.array([state.X, state.Y, state.Z]),
-            velocity=jnp.array([state.u, state.v, state.w]),
-            euler_angles=jnp.array([state.roll, state.pitch, state.yaw]),
-            angular_velocity=jnp.array([state.wx, state.wy, state.wz])
+            Ve=jnp.array([state.VXe, state.VYe, state.VZe]),
+            Xe=jnp.array([state.Xe, state.Ye, state.Ze]),
+            Vb=jnp.array([state.u, state.v, state.w]), 
+            Euler=jnp.array([state.roll, state.pitch, state.yaw]),
+            pqr=jnp.array([state.p, state.q, state.r])
         )
         sixdof_forces = jnp.array([forces.Fx, forces.Fy, forces.Fz])
         sixdof_moments = jnp.array([moments.L, moments.M, moments.N])
@@ -36,18 +37,21 @@ class Simulator:
         nxt_sixdof_state = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, 0, dt)["states"][-1]
         
         nxt_state = state._replace(
-            u = nxt_sixdof_state[0],
-            v = nxt_sixdof_state[1],
-            w = nxt_sixdof_state[2],
-            X = nxt_sixdof_state[3],
-            Y = nxt_sixdof_state[4],
-            Z = nxt_sixdof_state[5],
-            roll = nxt_sixdof_state[6],
-            pitch = nxt_sixdof_state[7],
-            yaw = nxt_sixdof_state[8],
-            wx = nxt_sixdof_state[9],
-            wy = nxt_sixdof_state[10],
-            wz = nxt_sixdof_state[11],
+            VXe = nxt_sixdof_state[0],
+            VYe = nxt_sixdof_state[1],
+            VZe = nxt_sixdof_state[2],
+            Xe = nxt_sixdof_state[3],
+            Ye = nxt_sixdof_state[4],
+            Ze = nxt_sixdof_state[5],
+            u = nxt_sixdof_state[6],
+            v = nxt_sixdof_state[7],
+            w = nxt_sixdof_state[8],
+            roll = nxt_sixdof_state[9],
+            pitch = nxt_sixdof_state[10],
+            yaw = nxt_sixdof_state[11],
+            p = nxt_sixdof_state[12],
+            q = nxt_sixdof_state[13],
+            r = nxt_sixdof_state[14]
         )
         return nxt_state
 
@@ -63,13 +67,11 @@ if __name__ == "__main__":
 
     # Define initial state variables
     state = StateVariables(
-        u=29.927, v=0, w=2.0927,
-        X=0.0, Y=0.0, Z=0.0,
+        u=29.9269, v=0.0, w=2.0927,
+        Xe=0.0, Ye=0.0, Ze=0.0,
         roll=0.0, pitch=0.069813, yaw=0.0,
-        Vbx=0.0, Vby=0.0, Vbz=0.0,
-        wx=0.0, wy=0.0, wz=0.0,
-        dwdt_x=0.0, dwdt_y=0.0, dwdt_z=0.0,
-        ax=0.0, ay=0.0, az=0.0,
+        VXe=30.0, VYe=0.0, VZe=0.0,
+        p=0.0, q=0.0, r=0.0,
         Fx=0.0, Fy=0.0, Fz=0.0,
         L=0.0, M=0.0, N=0.0
     )
