@@ -13,10 +13,11 @@ class MavrikEnv(gym.Env):
     def __init__(self):
         super(MavrikEnv, self).__init__()
         self.mavrik = Mavrik()
-        self.target_position = np.array([100., 100., 0.])
+        self.target_position = np.array([10., 0., 0.])
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.mavrik.state_ndim,), dtype=np.float32)
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(self.mavrik.control_ndim,), dtype=np.float32)
         self.state = self.reset()
+        self.t = 0
 
     def step(self, action):
         control = np.zeros(self.mavrik.control_ndim) + action
@@ -24,6 +25,7 @@ class MavrikEnv(gym.Env):
         next_state, info = self.mavrik.step(self.state, control)
         reward = self._compute_reward(next_state)
         self.state = next_state
+        self.t += 1
 
         done = self._is_done(next_state, control)
         if done < 0:
@@ -35,20 +37,19 @@ class MavrikEnv(gym.Env):
     def reset(self):
         U = 30  # trim speed
         eulerIn = [0,0.069813,0]  #[0, 4 * np.pi / 180, 0]  # trim attitude (roll, pitch, yaw)
-        vnedIn = [30., 0., 0.] #np.array([U * np.cos(eulerIn[1]), U * np.sin(eulerIn[1]), 0])  # NED velocity
-        # Convert NED velocity to body frame velocity
-    
+        vnedIn = [U, 0., 0.] #np.array([U * np.cos(eulerIn[1]), U * np.sin(eulerIn[1]), 0])  # NED velocity
+        vbIn = np.array([29.9269, 0.0, 2.0927])  # Body frame velocity
+        self.t = 0
         self.state = np.array([
-            *vnedIn,  # u, v, w
-            0.0, 0.0, 0.0,   # X, Y, Z
-            *eulerIn,   # roll, pitch, yaw
-            0.0, 0.0, 0.0,   # Vbx, Vby, Vbz
-            0.0, 0.0, 0.0,   # wx, wy, wz
-            0.0, 0.0, 0.0,   # dwdt_x, dwdt_y, dwdt_z
-            0.0, 0.0, 0.0,   # ax, ay, az
+            *vnedIn,  # VXe, VYe, VZe
+            0.0, 0.0, 0.0,  # Xe Ye Ze
+            
+            *eulerIn,   # roll, pitch, yaw 
+            0.0, 0.0, 0.0,   # p, q, r
             0.0, 0.0, 0.0,   # Fx, Fy, Fz
             0.0, 0.0, 0.0    # L, M, N
         ])
+
         return self.state
 
     def render(self, mode='human'):
@@ -65,7 +66,6 @@ class MavrikEnv(gym.Env):
         if np.isnan(next_state).any():
             print("Encountered NaN in state, ending episode.")
             return -1
-            
         position = state[3:6]
         distance = np.linalg.norm(position - self.target_position)
         velocity = state[:3]
@@ -174,6 +174,7 @@ if __name__ == "__main__":
         while not done:
             action = sac.select_action(state)
             next_state, reward, done, _ = env.step(action)
+            print(state, action, reward, next_state, done)
             sac.update(state, action, reward, next_state, done)
             state = next_state
 
