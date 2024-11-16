@@ -8,10 +8,12 @@ packages = [{include = "jax_mavrik"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
-jax = "0.4.31"
+jax = { version = "0.4.31", extras = ["cuda"] }
 pytest = "^8.3.3"
 diffrax = "^0.6.0"
 pyarrow = "^18.0.0"
+matplotlib = "^3.9.2"
+pandas = "^2.2.3"
 
 
 [build-system]
