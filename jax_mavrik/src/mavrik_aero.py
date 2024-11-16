@@ -15,38 +15,22 @@ from typing import Tuple, List
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs
 from jax_mavrik.mavrik_setup import MavrikSetup
 
-
-@jit
-def linear_interpolate(v0, v1, weight):
-    return v0 * (1 - weight) + v1 * weight
-
-@jit
-def get_index_and_weight(value, breakpoints):
-    """
-    Finds the index and weight for interpolation along a single dimension.
-    """
-    idx = jnp.clip(jnp.searchsorted(breakpoints, value) - 1, 0, len(breakpoints) - 2)
-    weight = (value - breakpoints[idx]) / (breakpoints[idx + 1] - breakpoints[idx])
-    return idx, weight
-
+# Define a standalone JIT-compatible function
 @jit
 def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: jnp.ndarray) -> float:
-    """
-    Perform n-dimensional interpolation using vectorized JAX operations.
+    """Perform n-dimensional interpolation."""
 
-    Args:
-        inputs (jnp.ndarray): The input coordinates at which to interpolate.
-        breakpoints (list of jnp.ndarray): Each array contains the breakpoints for one dimension.
-        values (jnp.ndarray): The values at each grid point with shape matching the breakpoints.
-
-    Returns:
-        jnp.ndarray: Interpolated value.
-    """
     ndim = len(breakpoints)
     indices = []
     weights = []
 
-    # Loop over each dimension instead of using vmap
+    # Function to find index and weight
+    def get_index_and_weight(value, breakpoints):
+        idx = jnp.clip(jnp.searchsorted(breakpoints, value) - 1, 0, len(breakpoints) - 2)
+        weight = (value - breakpoints[idx]) / (breakpoints[idx + 1] - breakpoints[idx])
+        return idx, weight
+
+    # Calculate index and weight for each dimension
     for i in range(ndim):
         idx, weight = get_index_and_weight(inputs[i], breakpoints[i])
         indices.append(idx)
@@ -54,32 +38,30 @@ def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: 
 
     indices = jnp.array(indices)
     weights = jnp.array(weights)
+    weights_complement = 1 - weights
 
-    # Generate corner indices for interpolation
+    # Generate all corner indices for interpolation
     corner_indices = jnp.stack(jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"), axis=-1).reshape(-1, ndim)
 
-    # Function to compute interpolated values for each corner
+    # Compute interpolated values at each corner
     def compute_corner_value(corner):
-        corner_idx = indices + corner
+        corner_idx = indices + corner  # Move to the correct corner indices
         corner_value = values[tuple(corner_idx)]
-        corner_weight = jnp.prod(jnp.where(corner, weights, 1 - weights))
+        corner_weight = jnp.prod(jnp.where(corner, weights, weights_complement))
         return corner_value * corner_weight
 
-    # Vectorize computation across all corners
+    # Apply vectorized computation for all corners and sum the results
     interpolated_values = vmap(compute_corner_value)(corner_indices)
-
-    # Sum contributions from all corners
     return jnp.sum(interpolated_values)
 
 class JaxNDInterpolator:
     def __init__(self, breakpoints: List[jnp.ndarray], values: jnp.ndarray):
         self.breakpoints = breakpoints
         self.values = values
- 
+
     def __call__(self, inputs: jnp.ndarray) -> float:
-        # Use partial to create a JAX-compatible function with fixed breakpoints and values
-        interpolator = ft.partial(interpolate_nd, breakpoints=self.breakpoints, values=self.values)
-        return interpolator(inputs)
+        # Call the standalone JIT-compiled function with fixed breakpoints and values
+        return interpolate_nd(inputs, self.breakpoints, self.values)
 
 class MavrikAero:
     def __init__(self, mavrik_setup: MavrikSetup):
@@ -259,9 +241,9 @@ class MavrikAero:
         CX_Scale = 0.5744 * u.Q
         CX_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CX_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CX_Scale_q = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.q
+        CX_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
-        wing_transform = jnp.array([[jnp.cos( u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
+        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
         
@@ -424,7 +406,8 @@ class MavrikAero:
         CY_Scale = 0.5744 * u.Q
         CY_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CY_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CY_Scale_q = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.q
+        CY_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
+        
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
@@ -602,7 +585,7 @@ class MavrikAero:
         CZ_Scale = 0.5744 * u.Q
         CZ_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CZ_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CZ_Scale_q = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.q
+        CZ_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
         
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
@@ -934,13 +917,12 @@ class MavrikAero:
     def M(self, u: ActuatorOutput) -> Moments:
         Cm_Scale = 0.5744 * 0.2032 * u.Q
         Cm_Scale_p = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        Cm_Scale_q = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.q
+        Cm_Scale_q = 0.5744 * 0.2032**2 * 2.8270 * 1.225 * 0.25 * u.U * u.q
         Cm_Scale_r = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.r
 
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
- 
         Cm_aileron_wing = self.Cm_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
@@ -1026,8 +1008,7 @@ class MavrikAero:
         Cm_hover_fuse = self.Cm_hover_fuse_lookup_table(jnp.array([
             u.U, u.alpha, u.beta
         ]))
-        Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse, 0.0])
-        Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse, 0.0])
+        Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse, 0.0]) 
 
         return Moments(
             Cm_aileron_wing_padded_transformed[0] + Cm_elevator_tail_padded_transformed[0] + Cm_flap_wing_padded_transformed[0] + Cm_rudder_tail_padded_transformed[0] +
