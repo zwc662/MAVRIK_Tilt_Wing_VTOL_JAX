@@ -1,3 +1,5 @@
+import os
+import sys
 import pytest
 from jax_mavrik.src.sixdof import SixDOFDynamics, RigidBody, SixDOFState
 from jax_mavrik.mavrik_setup import MavrikSetup
@@ -7,7 +9,9 @@ import jax.numpy as jnp
  
 @pytest.fixture
 def rigid_body():
-    mavrik_setup = MavrikSetup(file_path="/Users/weichaozhou/Workspace/Mavrik_JAX/jax_mavrik/aero_export.mat")
+    mavrik_setup = MavrikSetup(file_path=os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "jax_mavrik/aero_export.mat")
+    )
     mass = mavrik_setup.mass
     inertia = mavrik_setup.inertia
     return RigidBody(mass=mass, inertia=inertia)
