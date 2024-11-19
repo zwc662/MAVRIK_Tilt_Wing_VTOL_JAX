@@ -93,11 +93,12 @@ class MavrikAero:
 
         # Body frame velocities
         body_velocities = jnp.array([state.VXe, state.VYe, state.VZe])
-
+        #print(body_velocities)
         # Inertial frame velocities
         inertial_velocities = R @ body_velocities
         u, v, w = inertial_velocities
-         
+        print(f"{inertial_velocities=} vs. {state.u=}, {state.v=}, {state.w=}")
+        print(f"beta_from_inertial_velocity={jnp.arctan2(v, jnp.sqrt(u**2 + w**2))} vs. beta_from_state_vb={jnp.arctan2(state.v, jnp.sqrt(state.u**2 + state.w**2))}")
 
         actuator_input_state = ActuatorInutState(
             U = jnp.sqrt(u**2 + v**2 + w**2),
@@ -259,7 +260,7 @@ class MavrikAero:
         CX_Scale = 0.5744 * u.Q
         CX_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CX_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CX_Scale_q = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.q
+        CX_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
         wing_transform = jnp.array([[jnp.cos( u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
@@ -299,7 +300,7 @@ class MavrikAero:
         # Tail Damp p
         CX_tail_damp_p = self.CX_tail_damp_p_lookup_table(jnp.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-        ]))
+        ])) 
         CX_tail_damp_p_padded = jnp.array([CX_tail_damp_p, 0.0, 0.0])
         CX_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CX_tail_damp_p_padded * CX_Scale_p)
 
@@ -424,17 +425,17 @@ class MavrikAero:
         CY_Scale = 0.5744 * u.Q
         CY_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CY_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CY_Scale_q = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.q
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+        CY_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
-         
+        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
+        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+     
         CY_aileron_wing = self.CY_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
         CY_aileron_wing_padded = jnp.array([0.0, CY_aileron_wing, 0.0])
-        CY_aileron_wing_padded_transformed = jnp.dot(wing_transform, CY_aileron_wing_padded * CY_Scale)
-         
+        CY_aileron_wing_padded_transformed = jnp.dot(wing_transform, CY_aileron_wing_padded * CY_Scale)    
+
         CY_elevator_tail = self.CY_elevator_tail_lookup_table(jnp.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
         ]))
@@ -463,7 +464,7 @@ class MavrikAero:
         # Tail Damp p
         CY_tail_damp_p = self.CY_tail_damp_p_lookup_table(jnp.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-        ]))
+        ])) 
         CY_tail_damp_p_padded = jnp.array([0.0, CY_tail_damp_p, 0.0])
         CY_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_p_padded * CY_Scale_p)
 
@@ -602,8 +603,8 @@ class MavrikAero:
         CZ_Scale = 0.5744 * u.Q
         CZ_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CZ_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CZ_Scale_q = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.q
-        
+        CZ_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
+            
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
@@ -934,8 +935,10 @@ class MavrikAero:
     def M(self, u: ActuatorOutput) -> Moments:
         Cm_Scale = 0.5744 * 0.2032 * u.Q
         Cm_Scale_p = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        Cm_Scale_q = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.q
+        Cm_Scale_q = 0.5744 * 0.2032**2 * 1.225 * 0.25 * u.U * u.q
         Cm_Scale_r = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.r
+
+
 
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
@@ -1027,7 +1030,7 @@ class MavrikAero:
             u.U, u.alpha, u.beta
         ]))
         Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse, 0.0])
-        Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse, 0.0])
+          
 
         return Moments(
             Cm_aileron_wing_padded_transformed[0] + Cm_elevator_tail_padded_transformed[0] + Cm_flap_wing_padded_transformed[0] + Cm_rudder_tail_padded_transformed[0] +

@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Python: Test test_mavrik_aero.py",
+            "type": "pytest",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_mavrik_aero.py",
+            "pythonPath": "/home/zhouw534/anaconda3/envs/mavrik/bin/python",
+            "console": "integratedTerminal",
+            "args": ["-s"]
+        }
+    ]
+}

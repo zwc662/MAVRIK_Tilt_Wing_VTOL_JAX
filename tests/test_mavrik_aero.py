@@ -1,4 +1,9 @@
+
 import pytest
+
+import os
+import sys
+
 from jax_mavrik.src.mavrik_aero import MavrikAero
 
 from jax_mavrik.mavrik_setup import MavrikSetup
@@ -21,7 +26,7 @@ expected_actuator_outputs_values = jnp.array([
     [29.662640, 0.000549, 0.003131, -0.072976, -0.897200, 0.005492, 0.000549, 0.003131, 7500.000000, 0.000549, 0.000549, 0.003131, 0.003131, 0.000091, 0.000522, 0.000549, 0.003131, 7500.000000, 0.000549, 0.000549, 0.003131, 0.003131, 0.000549, 0.003131, 538.921725, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
     [29.632640, -0.009384, 0.003881, -0.081987, -0.926122, 0.007043, -0.009384, 0.003881, 7500.000000, -0.009384, -0.009384, 0.003881, 0.003881, -0.001564, 0.000647, -0.009384, 0.003881, 7500.000000, -0.009384, -0.009384, 0.003881, 0.003881, -0.009384, 0.003881, 537.832186, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
 ])
-
+ 
 expected_Cx_outputs_values = jnp.array([
     [-114.295761551278, 0, 0],
     [-114.449641091491, 0, 0],
@@ -127,10 +132,17 @@ expected_Ct_outputs_values = jnp.array([
 expected_Kq_outputs_values = jnp.zeros((11, 3))
     
 vned_values = jnp.array([
-    [30.0000, 0, 0], [29.9568, -0.0000, -0.0997], [29.9143, -0.0000, -0.1922],
-    [29.8730, -0.0001, -0.2767], [29.8329, -0.0002, -0.3529], [29.7944, -0.0004, -0.4203],
-    [29.7574, -0.0006, -0.4789], [29.7222, -0.0009, -0.5286], [29.6886, -0.0014, -0.5692],
-    [29.6565, -0.0019, -0.6011], [29.6261, -0.0024, -0.6243]
+    [30, 0, 0],
+    [29.9567831389439, -3.51941250302366e-06, -0.0997440875497484],
+    [29.9143319093421, -2.65331234960644e-05, -0.192173207312324],
+    [29.8729570058881, -8.60412192498947e-05, -0.276696983958294],
+    [29.8329056575015, -0.000196640193682423, -0.352861721876711],
+    [29.7943581170556, -0.000370459490889988, -0.420343306828564],
+    [29.757427693988, -0.000617183036355058, -0.478940011871429],
+    [29.7221638122189, -0.000944149475741599, -0.528565283937904],
+    [29.688557528394, -0.0013565245378527, -0.569240493527057],
+    [29.6565489261357, -0.00185753848333228, -0.601087571252145],
+    [29.6260623279978, -0.00244881552688928, -0.624332119435012]
 ])
 xned_values = jnp.array([
     [0, 0, 0], [0.2998, -0.0000, -0.0005], [0.5991, -0.0000, -0.0020],
@@ -139,10 +151,31 @@ xned_values = jnp.array([
     [2.6837, -0.0000, -0.0323], [2.9801, -0.0001, -0.0384]
 ])
 euler_values = jnp.array([
-    [0, 0.0698, 0], [-0.0000, 0.0690, 0.0000], [-0.0002, 0.0668, 0.0000],
-    [-0.0003, 0.0631, 0.0000], [-0.0006, 0.0583, 0.0000], [-0.0010, 0.0524, 0.0000],
-    [-0.0014, 0.0455, 0.0001], [-0.0019, 0.0379, 0.0001], [-0.0025, 0.0296, 0.0002],
-    [-0.0032, 0.0208, 0.0002], [-0.0040, 0.0117, 0.0003]
+    [0, 0.0698131700797732, 0],
+    [-3.83102680062787e-05, 0.069027550273576, 9.04912420146763e-07],
+    [-0.000153552072954416, 0.0667545746314907, 4.04379266341417e-06],
+    [-0.000346324277547203, 0.0631250471696481, 1.04563106233839e-05],
+    [-0.000617444272821253, 0.0582769141614382, 2.17223772942477e-05],
+    [-0.000967960790681804, 0.0523530362858272, 3.98915019931493e-05],
+    [-0.00139917382096866, 0.0454990840088095, 6.74119828350537e-05],
+    [-0.00191265923584729, 0.037861569344814, 0.000107062180078206],
+    [-0.00251029603504916, 0.0295860239493667, 0.000161885829038088],
+    [-0.00319429452677804, 0.0208153308552569, 0.00023513299654499],
+    [-0.00396730839598052, 0.0116881337865728, 0.000330210433969084]
+])
+
+pqr_values = jnp.array([
+    [0., 0., 0.], 
+    [-0.00768350180092004, -0.154989823766882, 0.000184719739060439], 
+    [-0.0154202999868224, -0.297333196758844, 0.000410217650372161],
+    [-0.0232339425294841, -0.42620080412076, 0.000705520892845865],
+    [-0.0311468587913183, -0.540991832053583, 0.0010989658870791],
+    [-0.0391808881509318, -0.641322449431708, 0.00161827128996843],
+    [-0.0473578390965414, -0.727012792362713, 0.00229062400935634],
+    [-0.0557000558782673, -0.798072801821959, 0.0031427860994394],
+    [-0.0642309728030263, -0.854687205567505, 0.00420122736840687],
+    [-0.0729756393288125, -0.89719988398178, 0.00549228559351451],
+    [-0.0819871990543792, -0.926122431019966, 0.00704303876561992]    
 ])
 vb_values = jnp.array([
     [29.9269, 0, 2.0927], [29.8923, -0.0001, 1.9667], [29.8605, -0.0004, 1.8037],
@@ -175,7 +208,9 @@ assert expected_actuator_outputs_values.shape == (11, 45)
  
 @pytest.fixture
 def mavrik_aero():
-    mavrik_setup = MavrikSetup(file_path="/Users/weichaozhou/Workspace/Mavrik_JAX/jax_mavrik/aero_export.mat")
+    mavrik_setup = MavrikSetup(file_path=os.path.join(
+        os.path.dirname(os.path.dirname(__file__)), "jax_mavrik/aero_export.mat")
+    )
     return MavrikAero(mavrik_setup=mavrik_setup)
 
 @pytest.fixture
@@ -208,22 +243,22 @@ def control_inputs():
 ])
 '''
 @pytest.mark.parametrize(
-    "vned, xned, euler, vb, ab, expected_forces, expected_moments, expected_actuator_outputs_values, expected_Cx_outputs_values, expected_Cy_outputs_values, expected_Cz_outputs_values, expected_Cl_outputs_values, expected_Cm_outputs_values, expected_Cn_outputs_values, expected_Ct_outputs_values, expected_Kq_outputs_values",
+    "id, vned, xned, euler, vb, pqr, expected_forces, expected_moments, expected_actuator_outputs_values, expected_Cx_outputs_values, expected_Cy_outputs_values, expected_Cz_outputs_values, expected_Cl_outputs_values, expected_Cm_outputs_values, expected_Cn_outputs_values, expected_Ct_outputs_values, expected_Kq_outputs_values",
     zip(
-        vned_values, xned_values, euler_values, vb_values, ab_values, expected_forces_values, expected_moments_values,
+        list(range(11)),
+        vned_values, xned_values, euler_values, vb_values, pqr_values, expected_forces_values, expected_moments_values,
         expected_actuator_outputs_values, expected_Cx_outputs_values, expected_Cy_outputs_values, expected_Cz_outputs_values,
         expected_Cl_outputs_values, expected_Cm_outputs_values, expected_Cn_outputs_values, expected_Ct_outputs_values, expected_Kq_outputs_values
     )
 )
 
-
-def test_mavrik_aero(mavrik_aero, control_inputs, vned, xned, euler, vb, ab, expected_forces, expected_moments, expected_actuator_outputs_values, expected_Cx_outputs_values, expected_Cy_outputs_values, expected_Cz_outputs_values, expected_Cl_outputs_values, expected_Cm_outputs_values, expected_Cn_outputs_values, expected_Ct_outputs_values, expected_Kq_outputs_values):
+def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr, expected_forces, expected_moments, expected_actuator_outputs_values, expected_Cx_outputs_values, expected_Cy_outputs_values, expected_Cz_outputs_values, expected_Cl_outputs_values, expected_Cm_outputs_values, expected_Cn_outputs_values, expected_Ct_outputs_values, expected_Kq_outputs_values):
     state = StateVariables(
         u=vb[0], v=vb[1], w=vb[2],
         Xe=xned[0], Ye=xned[1], Ze=xned[2],
         roll=euler[0], pitch=euler[1], yaw=euler[2],
         VXe=vned[0], VYe=vned[1], VZe=vned[2],
-        p=0.0, q=0.0, r=0.0,
+        p=pqr[0], q=pqr[1], r=pqr[2],
         Fx=0.0, Fy=0.0, Fz=0.0,
         L=0.0, M=0.0, N=0.0
     )
@@ -249,6 +284,15 @@ def test_mavrik_aero(mavrik_aero, control_inputs, vned, xned, euler, vb, ab, exp
         actuator_outputs.RPM_right10, actuator_outputs.RPM_right11, actuator_outputs.RPM_right12Out
     ])
 
+    print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")
+    actuator_close = jnp.allclose(actuator_outputs_array, expected_actuator_outputs_values, atol=0.001)
+    print('Actuator Outputs close???', actuator_close)
+    if not actuator_close:
+        print(f"\n  Expected: {expected_actuator_outputs_values}\n  Got: {actuator_outputs_array}")
+        max_diff_index = jnp.argmax(jnp.abs(actuator_outputs_array - expected_actuator_outputs_values))
+        print(f"\n  Max difference at index {max_diff_index}: Expected {expected_actuator_outputs_values[max_diff_index]}, Got {actuator_outputs_array[max_diff_index]}\n\n")
+     
+
     F0, M0 = mavrik_aero.Ct(actuator_outputs)
     Ct_array = jnp.array([F0.Fx, F0.Fy, F0.Fz, M0.L, M0.M, M0.N])
     F1 = mavrik_aero.Cx(actuator_outputs)
@@ -261,12 +305,25 @@ def test_mavrik_aero(mavrik_aero, control_inputs, vned, xned, euler, vb, ab, exp
     Cl_array = jnp.array([M1.L, M1.M, M1.N])
     M2 = mavrik_aero.M(actuator_outputs)
     Cm_array = jnp.array([M2.L, M2.M, M2.N])
-    M3 = mavrik_aero.Kq(actuator_outputs)
-    Kq_array = jnp.array([M3.L, M3.M, M3.N])
+    M3 = mavrik_aero.N(actuator_outputs)
+    Cn_array = jnp.array([M3.L, M3.M, M3.N])
+    M5 = mavrik_aero.Kq(actuator_outputs)
+    Kq_array = jnp.array([M5.L, M5.M, M5.N])
     
 
-    
-    print("Testing Results:")
+    Ct_close = jnp.allclose(Ct_array, expected_Ct_outputs_values, atol=1)
+    print("Ct Outputs close???", Ct_close)
+    if not Ct_close:
+        print(f"\n  Expected: {expected_Ct_outputs_values}\n  Got: {Ct_array}")
+        max_diff_index_Ct = jnp.argmax(jnp.abs(Ct_array - expected_Ct_outputs_values))
+        print(f"\n  Max difference in Ct at index {max_diff_index_Ct}: Expected {expected_Ct_outputs_values[max_diff_index_Ct]}, Got {Ct_array[max_diff_index_Ct]}")
+
+    Cn_close = jnp.allclose(Cn_array, expected_Cn_outputs_values, atol=1)
+    print("Cn Outputs close???", Cn_close)
+    if not Cn_close:
+        print(f"\n  Expected: {expected_Cn_outputs_values}\n  Got: {Cn_array}")
+        max_diff_index_Cn = jnp.argmax(jnp.abs(Cn_array - expected_Cn_outputs_values))
+        print(f"\n  Max difference in Cn at index {max_diff_index_Cn}: Expected {expected_Cn_outputs_values[max_diff_index_Cn]}, Got {Cn_array[max_diff_index_Cn]}")
 
     Cx_close = jnp.allclose(Cx_array, expected_Cx_outputs_values, atol=1)
     print("Cx Outputs close???", Cx_close)
@@ -278,6 +335,8 @@ def test_mavrik_aero(mavrik_aero, control_inputs, vned, xned, euler, vb, ab, exp
     Cy_close = jnp.allclose(Cy_array, expected_Cy_outputs_values, atol=1)
     print("Cy Outputs close???", Cy_close)
     if not Cy_close:
+        print(f"\n ActuatorOuputs As Expected??? {(actuator_outputs_array==expected_actuator_outputs_values)}")
+        print(f"{jnp.allclose(actuator_outputs_array, expected_actuator_outputs_values, atol=0.01)}")
         print(f"\n  Expected: {expected_Cy_outputs_values}\n  Got: {Cy_array}")
         max_diff_index_Cy = jnp.argmax(jnp.abs(Cy_array - expected_Cy_outputs_values))
         print(f"\n  Max difference in Cy at index {max_diff_index_Cy}: Expected {expected_Cy_outputs_values[max_diff_index_Cy]}, Got {Cy_array[max_diff_index_Cy]}")
@@ -310,13 +369,6 @@ def test_mavrik_aero(mavrik_aero, control_inputs, vned, xned, euler, vb, ab, exp
         max_diff_index_Kq = jnp.argmax(jnp.abs(Kq_array - expected_Kq_outputs_values))
         print(f"\n  Max difference in Kq at index {max_diff_index_Kq}: Expected {expected_Kq_outputs_values[max_diff_index_Kq]}, Got {Kq_array[max_diff_index_Kq]}")
 
-    actuator_close = jnp.allclose(actuator_outputs_array, expected_actuator_outputs_values, atol=1)
-    print('Actuator Outputs close???', actuator_close)
-    if not actuator_close:
-        print(f"\n  Expected: {expected_actuator_outputs_values}\n  Got: {actuator_outputs_array}")
-        max_diff_index = jnp.argmax(jnp.abs(actuator_outputs_array - expected_actuator_outputs_values))
-        print(f"\n  Max difference at index {max_diff_index}: Expected {expected_actuator_outputs_values[max_diff_index]}, Got {actuator_outputs_array[max_diff_index]}\n\n")
-     
     forces_array = jnp.array([forces.Fx, forces.Fy, forces.Fz])
     moments_array = jnp.array([moments.L, moments.M, moments.N])
 

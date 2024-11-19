@@ -1,0 +1,20 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+      
+        {
+            "name": "Pytest: test_Cm",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "cwd": "${workspaceFolder}/tests/",
+            "args": ["${workspaceFolder}/tests/test_Cm.py", "-s"],
+            "python": "/home/zhouw534/anaconda3/envs/mavrik/bin/python",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.vscode/project.env",
+        }
+    ] 
+}

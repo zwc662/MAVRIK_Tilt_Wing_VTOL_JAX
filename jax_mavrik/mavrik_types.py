@@ -40,16 +40,20 @@ class StateVariables(NamedTuple):
     VXe: Float  # Velocity in NED frame1
     VYe: Float  # Velocity in NED frame2
     VZe: Float  # Velocity in NED frame3
+
     Xe: Float  # Position in x direction
     Ye: Float  # Position in y direction
     Ze: Float  # Position in z direction
+
+    u: Float  # Body-frame velocity in x direction
+    v: Float  # Body-frame velocity in y direction
+    w: Float  # Body-frame velocity in z direction
+
     roll: Float  # Roll angle
     pitch: Float  # Pitch angle
     yaw: Float  # Yaw angle
     # DCM: np.ndarray  # Direction Cosine Matrix, np.array([[3x3]]) # If using xyz coordinate, there is no need for NED frame
-    u: Float  # Body-frame velocity in x direction
-    v: Float  # Body-frame velocity in y direction
-    w: Float  # Body-frame velocity in z direction
+   
     p: Float  # Angular velocity in x direction
     q: Float  # Angular velocity in y direction
     r: Float  # Angular velocity in z direction

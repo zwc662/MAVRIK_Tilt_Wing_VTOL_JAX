@@ -112,7 +112,14 @@ def euler_to_dcm(roll, pitch, yaw):
 
     # Rotation matrix from body frame to inertial frame
     return jnp.array([
+        [c_roll * c_pitch, s_roll * c_pitch, -s_pitch],
+        [c_roll * s_pitch * s_yaw - s_roll * c_yaw, s_roll * s_pitch * s_yaw + c_roll * c_yaw, c_pitch * s_yaw],
+        [c_roll * s_pitch * c_yaw + s_roll * s_yaw, s_roll * s_pitch * c_yaw - c_roll * s_yaw, c_pitch * c_yaw]
+    ])
+    '''
+    return jnp.array([
         [c_pitch * c_yaw, c_pitch * s_yaw, -s_pitch],
         [s_roll * s_pitch * c_yaw - c_roll * s_yaw, s_roll * s_pitch * s_yaw + c_roll * c_yaw, s_roll * c_pitch],
         [c_roll * s_pitch * c_yaw + s_roll * s_yaw, c_roll * s_pitch * s_yaw - s_roll * c_yaw, c_roll * c_pitch]
     ])
+    '''
