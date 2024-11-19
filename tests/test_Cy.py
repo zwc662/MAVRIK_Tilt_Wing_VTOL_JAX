@@ -112,7 +112,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     
     F2 = mavrik_aero.Cy(u)
     F2_array = jnp.array([F2.Fx, F2.Fy, F2.Fz])
-    CY_outputs_values_close = jnp.allclose(F2_array, expected_CY_outputs_values, atol=1)
+    CY_outputs_values_close = jnp.allclose(F2_array, expected_CY_outputs_values, atol=0.001)
     print("CY_outputs_values_close???", CY_outputs_values_close)
     if not CY_outputs_values_close:
         print(f"\n  Expected: {expected_CY_outputs_values}\n  Got: {F2_array}")
@@ -126,30 +126,30 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     CY_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
     
-    print("CY_Scale_close???", jnp.allclose(CY_Scale, expected_CY_Scale_values, atol=1))
-    if not jnp.allclose(CY_Scale, expected_CY_Scale_values, atol=1):
+    print("CY_Scale_close???", jnp.allclose(CY_Scale, expected_CY_Scale_values, atol=0.001))
+    if not jnp.allclose(CY_Scale, expected_CY_Scale_values, atol=0.001):
         print(f"\n  Expected: {expected_CY_Scale_values}\n  Got: {CY_Scale}")
-    print("CY_Scale_p_close???", jnp.allclose(CY_Scale_p, expected_CY_Scale_p_values, atol=1))
-    if not jnp.allclose(CY_Scale_p, expected_CY_Scale_p_values, atol=1):
+    print("CY_Scale_p_close???", jnp.allclose(CY_Scale_p, expected_CY_Scale_p_values, atol=0.001))
+    if not jnp.allclose(CY_Scale_p, expected_CY_Scale_p_values, atol=0.001):
         print(f"\n  Expected: {expected_CY_Scale_p_values}\n  Got: {CY_Scale_p}") 
-    print("CY_Scale_q_close???", jnp.allclose(CY_Scale_q, expected_CY_Scale_q_values, atol=1))
-    if not jnp.allclose(CY_Scale_q, expected_CY_Scale_q_values, atol=1):
+    print("CY_Scale_q_close???", jnp.allclose(CY_Scale_q, expected_CY_Scale_q_values, atol=0.001))
+    if not jnp.allclose(CY_Scale_q, expected_CY_Scale_q_values, atol=0.001):
         print(f"\n  Expected: {expected_CY_Scale_q_values}\n  Got: {CY_Scale_q}")
-    print("CY_Scale_r_close???", jnp.allclose(CY_Scale_r, expected_CY_Scale_r_values, atol=1))
-    if not jnp.allclose(CY_Scale_r, expected_CY_Scale_r_values, atol=1):
+    print("CY_Scale_r_close???", jnp.allclose(CY_Scale_r, expected_CY_Scale_r_values, atol=0.001))
+    if not jnp.allclose(CY_Scale_r, expected_CY_Scale_r_values, atol=0.001):
         print(f"\n  Expected: {expected_CY_Scale_r_values}\n  Got: {CY_Scale_r}") 
     
     wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
     tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
     
-    print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=1))
-    if not jnp.allclose(wing_transform, expected_wind_transform, atol=1):
+    print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=0.001))
+    if not jnp.allclose(wing_transform, expected_wind_transform, atol=0.001):
         print(f"\n  Expected: {expected_wind_transform}\n  Got: {wing_transform}")
         max_diff_index_wing_transform = jnp.argmax(jnp.abs(wing_transform - expected_wind_transform))
         print(f"\n  Max difference in wing_transform at index {max_diff_index_wing_transform}: Expected {expected_wind_transform[max_diff_index_wing_transform]}, Got {wing_transform[max_diff_index_wing_transform]}")
 
-    print("tail_transform_close???", jnp.allclose(tail_transform, expected_tail_transform, atol=1))
-    if not jnp.allclose(tail_transform, expected_tail_transform, atol=1):
+    print("tail_transform_close???", jnp.allclose(tail_transform, expected_tail_transform, atol=0.001))
+    if not jnp.allclose(tail_transform, expected_tail_transform, atol=0.001):
         print(f"\n  Expected: {expected_tail_transform}\n  Got: {tail_transform}")
         max_diff_index_tail_transform = jnp.argmax(jnp.abs(tail_transform - expected_tail_transform))
         print(f"\n  Max difference in tail_transform at index {max_diff_index_tail_transform}: Expected {expected_tail_transform[max_diff_index_tail_transform]}, Got {tail_transform[max_diff_index_tail_transform]}")
@@ -240,91 +240,91 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     ]))
     CY_hover_fuse_padded = jnp.array([0.0, CY_hover_fuse, 0.0])
      
-    CY_aileron_wing_close = jnp.allclose(CY_aileron_wing, expected_CY_alieron_wing_values, atol=1)
+    CY_aileron_wing_close = jnp.allclose(CY_aileron_wing, expected_CY_alieron_wing_values, atol=0.001)
     print("CY_aileron_wing_close???", CY_aileron_wing_close)
     if not CY_aileron_wing_close:
         print(f"\n  Expected: {expected_CY_alieron_wing_values}\n  Got: {CY_aileron_wing}")
         max_diff_index_CY_aileron_wing = jnp.argmax(jnp.abs(CY_aileron_wing - expected_CY_alieron_wing_values))
         print(f"\n  Max difference in CY_aileron_wing at index {max_diff_index_CY_aileron_wing}: Expected {expected_CY_alieron_wing_values[max_diff_index_CY_aileron_wing]}, Got {CY_aileron_wing[max_diff_index_CY_aileron_wing]}")
 
-    CY_elevator_tail_close = jnp.allclose(CY_elevator_tail, expected_CY_elevator_tail_values, atol=1)
+    CY_elevator_tail_close = jnp.allclose(CY_elevator_tail, expected_CY_elevator_tail_values, atol=0.001)
     print("CY_elevator_tail_close???", CY_elevator_tail_close)
     if not CY_elevator_tail_close:
         print(f"\n  Expected: {expected_CY_elevator_tail_values}\n  Got: {CY_elevator_tail}")
         max_diff_index_CY_elevator_tail = jnp.argmax(jnp.abs(CY_elevator_tail - expected_CY_elevator_tail_values))
         print(f"\n  Max difference in CY_elevator_tail at index {max_diff_index_CY_elevator_tail}: Expected {expected_CY_elevator_tail_values[max_diff_index_CY_elevator_tail]}, Got {CY_elevator_tail[max_diff_index_CY_elevator_tail]}")
 
-    CY_flap_wing_close = jnp.allclose(CY_flap_wing, expected_CY_flap_wing_values, atol=1)
+    CY_flap_wing_close = jnp.allclose(CY_flap_wing, expected_CY_flap_wing_values, atol=0.001)
     print("CY_flap_wing_close???", CY_flap_wing_close)
     if not CY_flap_wing_close:
         print(f"\n  Expected: {expected_CY_flap_wing_values}\n  Got: {CY_flap_wing}")
         max_diff_index_CY_flap_wing = jnp.argmax(jnp.abs(CY_flap_wing - expected_CY_flap_wing_values))
         print(f"\n  Max difference in CY_flap_wing at index {max_diff_index_CY_flap_wing}: Expected {expected_CY_flap_wing_values[max_diff_index_CY_flap_wing]}, Got {CY_flap_wing[max_diff_index_CY_flap_wing]}")
 
-    CY_rudder_tail_close = jnp.allclose(CY_rudder_tail, expected_CY_ruder_tail_values, atol=1)
+    CY_rudder_tail_close = jnp.allclose(CY_rudder_tail, expected_CY_ruder_tail_values, atol=0.001)
     print("CY_rudder_tail_close???", CY_rudder_tail_close)
     if not CY_rudder_tail_close:
         print(f"\n  Expected: {expected_CY_ruder_tail_values}\n  Got: {CY_rudder_tail}")
         max_diff_index_CY_rudder_tail = jnp.argmax(jnp.abs(CY_rudder_tail - expected_CY_ruder_tail_values))
         print(f"\n  Max difference in CY_rudder_tail at index {max_diff_index_CY_rudder_tail}: Expected {expected_CY_ruder_tail_values[max_diff_index_CY_rudder_tail]}, Got {CY_rudder_tail[max_diff_index_CY_rudder_tail]}")
 
-    CY_tail_close = jnp.allclose(CY_tail, expected_CY_tail_values, atol=1)
+    CY_tail_close = jnp.allclose(CY_tail, expected_CY_tail_values, atol=0.001)
     print("CY_tail_close???", CY_tail_close)
     if not CY_tail_close:
         print(f"\n  Expected: {expected_CY_tail_values}\n  Got: {CY_tail}")
         max_diff_index_CY_tail = jnp.argmax(jnp.abs(CY_tail - expected_CY_tail_values))
         print(f"\n  Max difference in CY_tail at index {max_diff_index_CY_tail}: Expected {expected_CY_tail_values[max_diff_index_CY_tail]}, Got {CY_tail[max_diff_index_CY_tail]}")
 
-    CY_tail_damp_p_close = jnp.allclose(CY_tail_damp_p, expected_CY_tail_damp_p_values, atol=1)
+    CY_tail_damp_p_close = jnp.allclose(CY_tail_damp_p, expected_CY_tail_damp_p_values, atol=0.001)
     print("CY_tail_damp_p_close???", CY_tail_damp_p_close)
     if not CY_tail_damp_p_close:
         print(f"\n  Expected: {expected_CY_tail_damp_p_values}\n  Got: {CY_tail_damp_p}")
         max_diff_index_CY_tail_damp_p = jnp.argmax(jnp.abs(CY_tail_damp_p - expected_CY_tail_damp_p_values))
         print(f"\n  Max difference in CY_tail_damp_p at index {max_diff_index_CY_tail_damp_p}: Expected {expected_CY_tail_damp_p_values[max_diff_index_CY_tail_damp_p]}, Got {CY_tail_damp_p[max_diff_index_CY_tail_damp_p]}")
 
-    CY_tail_damp_q_close = jnp.allclose(CY_tail_damp_q, expected_CY_tail_damp_q_values, atol=1)
+    CY_tail_damp_q_close = jnp.allclose(CY_tail_damp_q, expected_CY_tail_damp_q_values, atol=0.001)
     print("CY_tail_damp_q_close???", CY_tail_damp_q_close)
     if not CY_tail_damp_q_close:
         print(f"\n  Expected: {expected_CY_tail_damp_q_values}\n  Got: {CY_tail_damp_q}")
         max_diff_index_CY_tail_damp_q = jnp.argmax(jnp.abs(CY_tail_damp_q - expected_CY_tail_damp_q_values))
         print(f"\n  Max difference in CY_tail_damp_q at index {max_diff_index_CY_tail_damp_q}: Expected {expected_CY_tail_damp_q_values[max_diff_index_CY_tail_damp_q]}, Got {CY_tail_damp_q[max_diff_index_CY_tail_damp_q]}")
 
-    CY_tail_damp_r_close = jnp.allclose(CY_tail_damp_r, expected_CY_tail_damp_r_values, atol=1)
+    CY_tail_damp_r_close = jnp.allclose(CY_tail_damp_r, expected_CY_tail_damp_r_values, atol=0.001)
     print("CY_tail_damp_r_close???", CY_tail_damp_r_close)
     if not CY_tail_damp_r_close:
         print(f"\n  Expected: {expected_CY_tail_damp_r_values}\n  Got: {CY_tail_damp_r}")
         max_diff_index_CY_tail_damp_r = jnp.argmax(jnp.abs(CY_tail_damp_r - expected_CY_tail_damp_r_values))
         print(f"\n  Max difference in CY_tail_damp_r at index {max_diff_index_CY_tail_damp_r}: Expected {expected_CY_tail_damp_r_values[max_diff_index_CY_tail_damp_r]}, Got {CY_tail_damp_r[max_diff_index_CY_tail_damp_r]}")
 
-    CY_wing_close = jnp.allclose(CY_wing, expected_CY_wing_values, atol=1)
+    CY_wing_close = jnp.allclose(CY_wing, expected_CY_wing_values, atol=0.001)
     print("CY_wing_close???", CY_wing_close)
     if not CY_wing_close:
         print(f"\n  Expected: {expected_CY_wing_values}\n  Got: {CY_wing}")
         max_diff_index_CY_wing = jnp.argmax(jnp.abs(CY_wing - expected_CY_wing_values))
         print(f"\n  Max difference in CY_wing at index {max_diff_index_CY_wing}: Expected {expected_CY_wing_values[max_diff_index_CY_wing]}, Got {CY_wing[max_diff_index_CY_wing]}")
 
-    CY_wing_damp_p_close = jnp.allclose(CY_wing_damp_p, expected_CY_wing_damp_p_values, atol=1)
+    CY_wing_damp_p_close = jnp.allclose(CY_wing_damp_p, expected_CY_wing_damp_p_values, atol=0.001)
     print("CY_wing_damp_p_close???", CY_wing_damp_p_close)
     if not CY_wing_damp_p_close:
         print(f"\n  Expected: {expected_CY_wing_damp_p_values}\n  Got: {CY_wing_damp_p}")
         max_diff_index_CY_wing_damp_p = jnp.argmax(jnp.abs(CY_wing_damp_p - expected_CY_wing_damp_p_values))
         print(f"\n  Max difference in CY_wing_damp_p at index {max_diff_index_CY_wing_damp_p}: Expected {expected_CY_wing_damp_p_values[max_diff_index_CY_wing_damp_p]}, Got {CY_wing_damp_p[max_diff_index_CY_wing_damp_p]}")
 
-    CY_wing_damp_q_close = jnp.allclose(CY_wing_damp_q, expected_CY_wing_damp_q_values, atol=1)
+    CY_wing_damp_q_close = jnp.allclose(CY_wing_damp_q, expected_CY_wing_damp_q_values, atol=0.001)
     print("CY_wing_damp_q_close???", CY_wing_damp_q_close)
     if not CY_wing_damp_q_close:
         print(f"\n  Expected: {expected_CY_wing_damp_q_values}\n  Got: {CY_wing_damp_q}")
         max_diff_index_CY_wing_damp_q = jnp.argmax(jnp.abs(CY_wing_damp_q - expected_CY_wing_damp_q_values))
         print(f"\n  Max difference in CY_wing_damp_q at index {max_diff_index_CY_wing_damp_q}: Expected {expected_CY_wing_damp_q_values[max_diff_index_CY_wing_damp_q]}, Got {CY_wing_damp_q[max_diff_index_CY_wing_damp_q]}")
 
-    CY_wing_damp_r_close = jnp.allclose(CY_wing_damp_r, expected_CY_wing_damp_r_values, atol=1)
+    CY_wing_damp_r_close = jnp.allclose(CY_wing_damp_r, expected_CY_wing_damp_r_values, atol=0.001)
     print("CY_wing_damp_r_close???", CY_wing_damp_r_close)
     if not CY_wing_damp_r_close:
         print(f"\n  Expected: {expected_CY_wing_damp_r_values}\n  Got: {CY_wing_damp_r}")
         max_diff_index_CY_wing_damp_r = jnp.argmax(jnp.abs(CY_wing_damp_r - expected_CY_wing_damp_r_values))
         print(f"\n  Max difference in CY_wing_damp_r at index {max_diff_index_CY_wing_damp_r}: Expected {expected_CY_wing_damp_r_values[max_diff_index_CY_wing_damp_r]}, Got {CY_wing_damp_r[max_diff_index_CY_wing_damp_r]}")
 
-    CY_hover_fuse_close = jnp.allclose(CY_hover_fuse, expected_CY_hover_fuse_values, atol=1)
+    CY_hover_fuse_close = jnp.allclose(CY_hover_fuse, expected_CY_hover_fuse_values, atol=0.001)
     print("CY_hover_fuse_close???", CY_hover_fuse_close)
     if not CY_hover_fuse_close:
         print(f"\n  Expected: {expected_CY_hover_fuse_values}\n  Got: {CY_hover_fuse}")
@@ -347,7 +347,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     ])
 
 
-    CY_outputs_values_close = jnp.allclose(F2_array, expected_CY_outputs_values, atol=1)
+    CY_outputs_values_close = jnp.allclose(F2_array, expected_CY_outputs_values, atol=0.001)
     print("CY_outputs_values_close???", CY_outputs_values_close)
     if not CY_outputs_values_close:
         print(f"\n  Expected: {expected_CY_outputs_values}\n  Got: {F2_array}")

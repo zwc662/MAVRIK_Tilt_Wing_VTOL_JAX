@@ -8,8 +8,12 @@ from jax_mavrik.src.mavrik_aero import MavrikAero
 
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs
-
-from jax_mavrik.src.utils.mat_tools import euler_to_dcm
+ 
+from .test_mavrik import( 
+    vned_values, xned_values, euler_values, vb_values, pqr_values, 
+    forces_values as expected_forces_values, 
+    moments_values as expected_moments_values
+) 
 
 import jax.numpy as jnp
 
@@ -130,77 +134,6 @@ expected_Ct_outputs_values = jnp.array([
 ])
 
 expected_Kq_outputs_values = jnp.zeros((11, 3))
-    
-vned_values = jnp.array([
-    [30, 0, 0],
-    [29.9567831389439, -3.51941250302366e-06, -0.0997440875497484],
-    [29.9143319093421, -2.65331234960644e-05, -0.192173207312324],
-    [29.8729570058881, -8.60412192498947e-05, -0.276696983958294],
-    [29.8329056575015, -0.000196640193682423, -0.352861721876711],
-    [29.7943581170556, -0.000370459490889988, -0.420343306828564],
-    [29.757427693988, -0.000617183036355058, -0.478940011871429],
-    [29.7221638122189, -0.000944149475741599, -0.528565283937904],
-    [29.688557528394, -0.0013565245378527, -0.569240493527057],
-    [29.6565489261357, -0.00185753848333228, -0.601087571252145],
-    [29.6260623279978, -0.00244881552688928, -0.624332119435012]
-])
-xned_values = jnp.array([
-    [0, 0, 0], [0.2998, -0.0000, -0.0005], [0.5991, -0.0000, -0.0020],
-    [0.8981, -0.0000, -0.0043], [1.1966, -0.0000, -0.0075], [1.4947, -0.0000, -0.0114],
-    [1.7925, -0.0000, -0.0159], [2.0899, -0.0000, -0.0209], [2.3869, -0.0000, -0.0264],
-    [2.6837, -0.0000, -0.0323], [2.9801, -0.0001, -0.0384]
-])
-euler_values = jnp.array([
-    [0, 0.0698131700797732, 0],
-    [-3.83102680062787e-05, 0.069027550273576, 9.04912420146763e-07],
-    [-0.000153552072954416, 0.0667545746314907, 4.04379266341417e-06],
-    [-0.000346324277547203, 0.0631250471696481, 1.04563106233839e-05],
-    [-0.000617444272821253, 0.0582769141614382, 2.17223772942477e-05],
-    [-0.000967960790681804, 0.0523530362858272, 3.98915019931493e-05],
-    [-0.00139917382096866, 0.0454990840088095, 6.74119828350537e-05],
-    [-0.00191265923584729, 0.037861569344814, 0.000107062180078206],
-    [-0.00251029603504916, 0.0295860239493667, 0.000161885829038088],
-    [-0.00319429452677804, 0.0208153308552569, 0.00023513299654499],
-    [-0.00396730839598052, 0.0116881337865728, 0.000330210433969084]
-])
-
-pqr_values = jnp.array([
-    [0., 0., 0.], 
-    [-0.00768350180092004, -0.154989823766882, 0.000184719739060439], 
-    [-0.0154202999868224, -0.297333196758844, 0.000410217650372161],
-    [-0.0232339425294841, -0.42620080412076, 0.000705520892845865],
-    [-0.0311468587913183, -0.540991832053583, 0.0010989658870791],
-    [-0.0391808881509318, -0.641322449431708, 0.00161827128996843],
-    [-0.0473578390965414, -0.727012792362713, 0.00229062400935634],
-    [-0.0557000558782673, -0.798072801821959, 0.0031427860994394],
-    [-0.0642309728030263, -0.854687205567505, 0.00420122736840687],
-    [-0.0729756393288125, -0.89719988398178, 0.00549228559351451],
-    [-0.0819871990543792, -0.926122431019966, 0.00704303876561992]    
-])
-vb_values = jnp.array([
-    [29.9269, 0, 2.0927], [29.8923, -0.0001, 1.9667], [29.8605, -0.0004, 1.8037],
-    [29.8309, -0.0010, 1.6083], [29.8028, -0.0017, 1.3853], [29.7755, -0.0027, 1.1393],
-    [29.7484, -0.0038, 0.8750], [29.7209, -0.0053, 0.5969], [29.6924, -0.0069, 0.3092],
-    [29.6626, -0.0089, 0.0163], [29.6313, -0.0111, -0.2781]
-])
-ab_values = jnp.array([
-    [-3.6179, 0, -10.5957], [-3.3106, -0.0213, -14.5262], [-3.0595, -0.0425, -17.9956],
-    [-2.8740, -0.0638, -20.9965], [-2.7576, -0.0853, -23.5272], [-2.7093, -0.1073, -25.5916],
-    [-2.7239, -0.1301, -27.1984], [-2.7932, -0.1543, -28.3612], [-2.9064, -0.1804, -29.0974],
-    [-3.0515, -0.2090, -29.4287], [-3.2104, -0.2409, -29.3826]
-])
-expected_forces_values = jnp.array([
-    [-90.4479, 0, -264.8931], [-90.3843, -0.0160, -247.3303], [-89.8961, -0.0612, -227.9275],
-    [-88.9870, -0.1344, -207.0631], [-87.6768, -0.2347, -185.1024], [-85.9998, -0.3614, -162.3944],
-    [-84.0019, -0.5138, -139.2693], [-81.7374, -0.6915, -116.0362], [-79.2664, -0.8944, -92.9816],
-    [-76.6521, -1.1221, -70.3684], [-73.8203, -1.3749, -48.4869]
-])
-expected_moments_values = jnp.array([
-    [-3.7189, -97.2170, 0.1650], [-3.7389, -89.8779, 0.1910], [-3.7709, -81.9669, 0.2476],
-    [-3.8143, -73.6251, 0.3335], [-3.8688, -64.9871, 0.4480], [-3.9344, -56.1802, 0.5900],
-    [-4.0113, -47.3234, 0.7588], [-4.0999, -38.5267, 0.9536], [-4.2011, -29.8911, 1.1739],
-    [-4.3158, -21.5078, 1.4193], [-4.4712, -13.4886, 1.6910]
-])
 
 
 
@@ -212,6 +145,7 @@ def mavrik_aero():
         os.path.dirname(os.path.dirname(__file__)), "jax_mavrik/aero_export.mat")
     )
     return MavrikAero(mavrik_setup=mavrik_setup)
+
 
 @pytest.fixture
 def control_inputs():
@@ -226,7 +160,7 @@ def control_inputs():
         RPM_right9=7500, RPM_right10=7500,
         RPM_right11=7500, RPM_right12Out=7500
     )
- 
+
 @pytest.mark.parametrize(
     "id, vned, xned, euler, vb, pqr, expected_forces, expected_moments, expected_actuator_outputs_values, expected_Cx_outputs_values, expected_Cy_outputs_values, expected_Cz_outputs_values, expected_Cl_outputs_values, expected_Cm_outputs_values, expected_Cn_outputs_values, expected_Ct_outputs_values, expected_Kq_outputs_values",
     zip(
@@ -244,8 +178,8 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
         roll=euler[0], pitch=euler[1], yaw=euler[2],
         VXe=vned[0], VYe=vned[1], VZe=vned[2],
         p=pqr[0], q=pqr[1], r=pqr[2],
-        Fx=0.0, Fy=0.0, Fz=0.0,
-        L=0.0, M=0.0, N=0.0
+        pdot = 0, qdot = 0, rdot = 0,
+        udot = 0, vdot = 0, wdot = 0
     )
 
     forces, moments, actuator_outputs = mavrik_aero(state, control_inputs)
@@ -296,28 +230,28 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
     Kq_array = jnp.array([M5.L, M5.M, M5.N])
     
 
-    Ct_close = jnp.allclose(Ct_array, expected_Ct_outputs_values, atol=1)
+    Ct_close = jnp.allclose(Ct_array, expected_Ct_outputs_values, atol=0.1)
     print("Ct Outputs close???", Ct_close)
     if not Ct_close:
         print(f"\n  Expected: {expected_Ct_outputs_values}\n  Got: {Ct_array}")
         max_diff_index_Ct = jnp.argmax(jnp.abs(Ct_array - expected_Ct_outputs_values))
         print(f"\n  Max difference in Ct at index {max_diff_index_Ct}: Expected {expected_Ct_outputs_values[max_diff_index_Ct]}, Got {Ct_array[max_diff_index_Ct]}")
 
-    Cn_close = jnp.allclose(Cn_array, expected_Cn_outputs_values, atol=1)
+    Cn_close = jnp.allclose(Cn_array, expected_Cn_outputs_values, atol=0.1)
     print("Cn Outputs close???", Cn_close)
     if not Cn_close:
         print(f"\n  Expected: {expected_Cn_outputs_values}\n  Got: {Cn_array}")
         max_diff_index_Cn = jnp.argmax(jnp.abs(Cn_array - expected_Cn_outputs_values))
         print(f"\n  Max difference in Cn at index {max_diff_index_Cn}: Expected {expected_Cn_outputs_values[max_diff_index_Cn]}, Got {Cn_array[max_diff_index_Cn]}")
 
-    Cx_close = jnp.allclose(Cx_array, expected_Cx_outputs_values, atol=1)
+    Cx_close = jnp.allclose(Cx_array, expected_Cx_outputs_values, atol=0.1)
     print("Cx Outputs close???", Cx_close)
     if not Cx_close:
         print(f"\n  Expected: {expected_Cx_outputs_values}\n  Got: {Cx_array}")
         max_diff_index_Cx = jnp.argmax(jnp.abs(Cx_array - expected_Cx_outputs_values))
         print(f"\n  Max difference in Cx at index {max_diff_index_Cx}: Expected {expected_Cx_outputs_values[max_diff_index_Cx]}, Got {Cx_array[max_diff_index_Cx]}")
 
-    Cy_close = jnp.allclose(Cy_array, expected_Cy_outputs_values, atol=1)
+    Cy_close = jnp.allclose(Cy_array, expected_Cy_outputs_values, atol=0.1)
     print("Cy Outputs close???", Cy_close)
     if not Cy_close:
         print(f"\n ActuatorOuputs As Expected??? {(actuator_outputs_array==expected_actuator_outputs_values)}")
@@ -326,28 +260,28 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
         max_diff_index_Cy = jnp.argmax(jnp.abs(Cy_array - expected_Cy_outputs_values))
         print(f"\n  Max difference in Cy at index {max_diff_index_Cy}: Expected {expected_Cy_outputs_values[max_diff_index_Cy]}, Got {Cy_array[max_diff_index_Cy]}")
 
-    Cz_close = jnp.allclose(Cz_array, expected_Cz_outputs_values, atol=1)
+    Cz_close = jnp.allclose(Cz_array, expected_Cz_outputs_values, atol=0.1)
     print("Cz Outputs close???", Cz_close)
     if not Cz_close:
         print(f"\n  Expected: {expected_Cz_outputs_values}\n  Got: {Cz_array}")
         max_diff_index_Cz = jnp.argmax(jnp.abs(Cz_array - expected_Cz_outputs_values))
         print(f"\n  Max difference in Cz at index {max_diff_index_Cz}: Expected {expected_Cz_outputs_values[max_diff_index_Cz]}, Got {Cz_array[max_diff_index_Cz]}")
 
-    Cl_close = jnp.allclose(Cl_array, expected_Cl_outputs_values, atol=1)
+    Cl_close = jnp.allclose(Cl_array, expected_Cl_outputs_values, atol=0.1)
     print("Cl Outputs close???", Cl_close)
     if not Cl_close:
         print(f"\n  Expected: {expected_Cl_outputs_values}\n  Got: {Cl_array}")
         max_diff_index_Cl = jnp.argmax(jnp.abs(Cl_array - expected_Cl_outputs_values))
         print(f"\n  Max difference in Cl at index {max_diff_index_Cl}: Expected {expected_Cl_outputs_values[max_diff_index_Cl]}, Got {Cl_array[max_diff_index_Cl]}")
 
-    Cm_close = jnp.allclose(Cm_array, expected_Cm_outputs_values, atol=1)
+    Cm_close = jnp.allclose(Cm_array, expected_Cm_outputs_values, atol=0.1)
     print("Cm Outputs close???", Cm_close)
     if not Cm_close:
         print(f"\n  Expected: {expected_Cm_outputs_values}\n  Got: {Cm_array}")
         max_diff_index_Cm = jnp.argmax(jnp.abs(Cm_array - expected_Cm_outputs_values))
         print(f"\n  Max difference in Cm at index {max_diff_index_Cm}: Expected {expected_Cm_outputs_values[max_diff_index_Cm]}, Got {Cm_array[max_diff_index_Cm]}")
 
-    Kq_close = jnp.allclose(Kq_array, expected_Kq_outputs_values, atol=1)
+    Kq_close = jnp.allclose(Kq_array, expected_Kq_outputs_values, atol=0.1)
     print("Kq Outputs close???", Kq_close)
     if not Kq_close:
         print(f"\n  Expected: {expected_Kq_outputs_values}\n  Got: {Kq_array}")
@@ -357,14 +291,14 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
     forces_array = jnp.array([forces.Fx, forces.Fy, forces.Fz])
     moments_array = jnp.array([moments.L, moments.M, moments.N])
 
-    forces_close = jnp.allclose(forces_array, expected_forces, atol=1)
+    forces_close = jnp.allclose(forces_array, expected_forces, atol=0.1)
     print("Forces close???", forces_close)
     if not forces_close:
         print( f"\n  Expected: {expected_forces}\n  Got: {forces_array}")
         max_diff_index_forces = jnp.argmax(jnp.abs(forces_array - expected_forces))
         print(f"\n  Max difference in forces at index {max_diff_index_forces}: Expected {expected_forces[max_diff_index_forces]}, Got {forces_array[max_diff_index_forces]}")
 
-    moments_close =  jnp.allclose(moments_array, expected_moments, atol=1)
+    moments_close =  jnp.allclose(moments_array, expected_moments, atol=0.1)
     print("Moments close???", moments_close)
     if not moments_close:
         print(f"\n  Expected: {expected_moments}\n  Got: {moments_array}")

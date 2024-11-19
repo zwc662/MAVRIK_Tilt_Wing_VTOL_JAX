@@ -12,21 +12,9 @@ from jax_mavrik.src.actuator import ActuatorOutput
 
 from jax_mavrik.src.utils.mat_tools import euler_to_dcm
 
-import jax.numpy as jnp
+from .test_mavrik_aero import expected_actuator_outputs_values as actuator_outputs_values
 
-actuator_outputs_values = jnp.array([
-    [30.000000, 0.069813, 0.000000, 0.000000, 0.000000, 0.000000, 0.069813, 0.000000, 7500.000000, 0.069813, 0.069813, 0.000000, 0.000000, 0.011636, 0.000000, 0.069813, 0.000000, 7500.000000, 0.069813, 0.069813, 0.000000, 0.000000, 0.069813, 0.000000, 551.250000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.956949, 0.065698, 0.000038, -0.007684, -0.154990, 0.000185, 0.065698, 0.000038, 7500.000000, 0.065698, 0.065698, 0.000038, 0.000038, 0.010950, 0.000006, 0.065698, 0.000038, 7500.000000, 0.065698, 0.065698, 0.000038, 0.000038, 0.065698, 0.000038, 549.669018, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000], 
-    [29.914949, 0.060331, 0.000153, -0.015420, -0.297333, 0.000410, 0.060331, 0.000153, 7500.000000, 0.060331, 0.060331, 0.000153, 0.000153, 0.010055, 0.000025, 0.060331, 0.000153, 7500.000000, 0.060331, 0.060331, 0.000153, 0.000153, 0.060331, 0.000153, 548.128813, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.874238, 0.053863, 0.000344, -0.023234, -0.426201, 0.000706, 0.053863, 0.000344, 7500.000000, 0.053863, 0.053863, 0.000344, 0.000344, 0.008977, 0.000057, 0.053863, 0.000344, 7500.000000, 0.053863, 0.053863, 0.000344, 0.000344, 0.053863, 0.000344, 546.637949, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.834992, 0.046450, 0.000612, -0.031147, -0.540992, 0.001099, 0.046450, 0.000612, 7500.000000, 0.046450, 0.046450, 0.000612, 0.000612, 0.007742, 0.000102, 0.046450, 0.000612, 7500.000000, 0.046450, 0.046450, 0.000612, 0.000612, 0.046450, 0.000612, 545.202647, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.797323, 0.038246, 0.000957, -0.039181, -0.641322, 0.001618, 0.038246, 0.000957, 7500.000000, 0.038246, 0.038246, 0.000957, 0.000957, 0.006374, 0.000159, 0.038246, 0.000957, 7500.000000, 0.038246, 0.038246, 0.000957, 0.000957, 0.038246, 0.000957, 543.826784, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.761282, 0.029406, 0.001380, -0.047358, -0.727013, 0.002291, 0.029406, 0.001380, 7500.000000, 0.029406, 0.029406, 0.001380, 0.001380, 0.004901, 0.000230, 0.029406, 0.001380, 7500.000000, 0.029406, 0.029406, 0.001380, 0.001380, 0.029406, 0.001380, 542.512006, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.726863, 0.020080, 0.001883, -0.055700, -0.798073, 0.003143, 0.020080, 0.001883, 7500.000000, 0.020080, 0.020080, 0.001883, 0.001883, 0.003347, 0.000314, 0.020080, 0.001883, 7500.000000, 0.020080, 0.020080, 0.001883, 0.001883, 0.020080, 0.001883, 541.257922, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.694014, 0.010414, 0.002466, -0.064231, -0.854687, 0.004201, 0.010414, 0.002466, 7500.000000, 0.010414, 0.010414, 0.002466, 0.002466, 0.001736, 0.000411, 0.010414, 0.002466, 7500.000000, 0.010414, 0.010414, 0.002466, 0.002466, 0.010414, 0.002466, 540.062372, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.662640, 0.000549, 0.003131, -0.072976, -0.897200, 0.005492, 0.000549, 0.003131, 7500.000000, 0.000549, 0.000549, 0.003131, 0.003131, 0.000091, 0.000522, 0.000549, 0.003131, 7500.000000, 0.000549, 0.000549, 0.003131, 0.003131, 0.000549, 0.003131, 538.921725, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-    [29.632640, -0.009384, 0.003881, -0.081987, -0.926122, 0.007043, -0.009384, 0.003881, 7500.000000, -0.009384, -0.009384, 0.003881, 0.003881, -0.001564, 0.000647, -0.009384, 0.003881, 7500.000000, -0.009384, -0.009384, 0.003881, 0.003881, -0.009384, 0.003881, 537.832186, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 0.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000, 7500.000000],
-])
+import jax.numpy as jnp
  
 expected_CX_outputs_values = jnp.array([
     [-114.295761551278, 0, 0],
@@ -119,8 +107,59 @@ expected_CX_Scale_r_values = jnp.array([
 expected_wind_transform = jnp.repeat(jnp.diag(jnp.array([1., 1., 1.]))[None, :, :], 11, axis=0)
 expected_tail_transform = jnp.repeat(jnp.diag(jnp.array([1., 1., 1.]))[None, :, :], 11, axis=0) 
 
+expected_CX_aileron_wing_padded_transformed_values = jnp.zeros([11, 3])
+expected_CX_elevator_tail_padded_transformed_values = jnp.zeros([11, 3])
+expected_CX_flap_wing_padded_transformed_values = jnp.zeros([11, 3])
+expected_CX_ruder_tail_padded_transformed_values = jnp.zeros([11, 3]) 
+expected_CX_tail_padded_transformed_values = jnp.array([
+    [-63.623885855465, 0, 0], [-63.2550954827951, 0, 0], [-62.8355454722308, 0, 0], [-62.3734660093156, 0, 0],
+    [-61.8768206919609, 0, 0], [-61.3532212984774, 0, 0], [-60.8098660882786, 0, 0], [-60.2534979450777, 0, 0],
+    [-59.6903786165827, 0, 0], [-59.1262754917973, 0, 0], [-58.5670869260815, 0, 0]
+]) 
+expected_CX_tail_damp_p_padded_transformed_values = jnp.array([
+    [0, 0, 0], [6.36364099057827e-07, 0, 0], [4.86218738484348e-06, 0, 0], [1.49688329370358e-05, 0, 0],
+    [3.13946423799204e-05, 0, 0], [5.23508755191238e-05, 0, 0], [7.35564125284874e-05, 0, 0], [8.80732285421646e-05, 0, 0],
+    [8.62330335997906e-05, 0, 0], [5.56433747248851e-05, 0, 0], [-1.86514713777755e-05, 0, 0]
+])
+expected_CX_tail_damp_q_padded_transformed_values = jnp.array([
+    [0., 0., 0.], [-0.293551015165968, 0., 0.], [-0.525587630265134, 0., 0.], [-0.688920031570008, 0., 0.],
+    [-0.781136779785952, 0., 0.], [-0.804046581045146, 0., 0.], [-0.762997639739867, 0., 0.], [-0.666125059990016, 0., 0.],
+    [-0.52357190575136, 0., 0.], [-0.346723564666579, 0., 0.], [-0.147770030545052, 0., 0.]
+])
+expected_CX_tail_damp_r_padded_transformed_values = jnp.array([
+    [0, 0, 0], [-5.51630936499317e-08, 0, 0], [-6.41972464260803e-07, 0, 0], [-2.58702927276466e-06, 0, 0],
+    [-7.25322725059744e-06, 0, 0], [-1.67699624028615e-05, 0, 0], [-3.42592900221475e-05, 0, 0],
+    [-6.4062976936785e-05, 0, 0], [-0.000111976335294963, 0, 0], [-0.000185495838112339, 0, 0],
+    [-0.000294123861313685, 0, 0]
+])
+expected_CX_wing_padded_transformed_values = jnp.array([
+    [-50.7989503070284, 0, 0], [-50.1234565821909, 0, 0], [-49.2929482332759, 0, 0], [-48.3291035261969, 0, 0],
+    [-47.2533572754573, 0, 0], [-46.0866590016547, 0, 0], [-44.8492745761155, 0, 0], [-43.5606250284183, 0, 0],
+    [-42.2391561815149, 0, 0], [-40.9022333207335, 0, 0], [-39.570536611842, 0, 0]
+])
+expected_CX_wing_damp_p_padded_transformed_values = jnp.array([
+    [0, 0, 0], [-2.23699386985609e-05, 0, 0], [-3.16976021171951e-05, 0, 0], [-1.94770460473253e-05, 0, 0],
+    [1.90413505029019e-05, 0, 0], [8.4135295211105e-05, 0, 0], [0.000171117128425723, 0, 0], [0.000270049301303897, 0, 0],
+    [0.000365651782984657, 0, 0], [0.000437379627911026, 0, 0], [0.000460318623654083, 0, 0]
+]) 
+expected_CX_wing_damp_q_padded_transformed_values = jnp.array([
+    [0., 0., 0.], [-0.904927094551725, 0., 0.], [-1.63788760389945, 0., 0.], [-2.17938373637319, 0., 0.],
+    [-2.52259670802293, 0., 0.], [-2.67191850389586, 0., 0.], [-2.64116282222466, 0., 0.], [-2.45158728577286, 0., 0.],
+    [-2.12984625848873, 0., 0.], [-1.70597797437523, 0., 0.], [-1.21204083633113, 0., 0.]
+]) 
+expected_CX_wing_damp_r_padded_transformed_values = jnp.array([
+    [0., 0., 0.], [6.14870091231421e-07, 0., 0.], [1.46722459482766e-06, 0., 0.], [2.73518803597856e-06, 0., 0.],
+    [4.64050084638555e-06, 0., 0.], [7.45562964498673e-06, 0., 0.], [1.15067964037952e-05, 0., 0.], [1.71733502499308e-05, 0., 0.],
+    [2.48841245854471e-05, 0., 0.], [3.51115514969811e-05, 0., 0.], [4.86188337017861e-05, 0., 0.]
+]) 
 
+expected_CX_hover_fuse_padded_values = jnp.array([
+    [0.127074611215061, 0, 0], [0.127410257080372, 0, 0], [0.128142918146765, 0, 0], [0.129223248658007, 0, 0],
+    [0.130601747941244, 0, 0], [0.132229291964742, 0, 0], [0.134057593555574, 0, 0], [0.136039607961673, 0, 0],
+    [0.138129899596156, 0, 0], [0.14028498270579, 0, 0], [0.142464454973778, 0, 0]
+])
 
+ 
 @pytest.fixture
 def mavrik_aero():
     mavrik_setup = MavrikSetup(file_path=os.path.join(
@@ -133,26 +172,30 @@ def mavrik_aero():
     "id, actuator_outputs_values, \
         expected_CX_outputs_values, expected_CX_alieron_wing_values, expected_CX_elevator_tail_values, expected_CX_flap_wing_values, expected_CX_ruder_tail_values, expected_CX_tail_values, expected_CX_tail_damp_p_values, expected_CX_tail_damp_q_values, expected_CX_tail_damp_r_values, expected_CX_wing_values, expected_CX_wing_damp_p_values, expected_CX_wing_damp_q_values, expected_CX_wing_damp_r_values, expected_CX_hover_fuse_values, \
             expected_CX_Scale_values, expected_CX_Scale_p_values, expected_CX_Scale_q_values, expected_CX_Scale_r_values, \
-                expected_wind_transform, expected_tail_transform",
+                expected_wind_transform, expected_tail_transform, \
+                expected_CX_tail_padded_transformed_values, expected_CX_tail_damp_p_padded_transformed_values, expected_CX_tail_damp_q_padded_transformed_values, expected_CX_tail_damp_r_padded_transformed_values, expected_CX_wing_padded_transformed_values, expected_CX_wing_damp_p_padded_transformed_values, expected_CX_wing_damp_q_padded_transformed_values, expected_CX_wing_damp_r_padded_transformed_values, expected_CX_hover_fuse_padded_values",
     zip(
         list(range(11)), actuator_outputs_values, \
             expected_CX_outputs_values, expected_CX_alieron_wing_values, expected_CX_elevator_tail_values, expected_CX_flap_wing_values, expected_CX_ruder_tail_values, expected_CX_tail_values, expected_CX_tail_damp_p_values, expected_CX_tail_damp_q_values, expected_CX_tail_damp_r_values, expected_CX_wing_values, expected_CX_wing_damp_p_values, expected_CX_wing_damp_q_values, expected_CX_wing_damp_r_values, expected_CX_hover_fuse_values, \
             expected_CX_Scale_values, expected_CX_Scale_p_values, expected_CX_Scale_q_values, expected_CX_Scale_r_values,
-            expected_wind_transform, expected_tail_transform
+            expected_wind_transform, expected_tail_transform, \
+            expected_CX_tail_padded_transformed_values, expected_CX_tail_damp_p_padded_transformed_values, expected_CX_tail_damp_q_padded_transformed_values, expected_CX_tail_damp_r_padded_transformed_values, expected_CX_wing_padded_transformed_values, expected_CX_wing_damp_p_padded_transformed_values, expected_CX_wing_damp_q_padded_transformed_values, expected_CX_wing_damp_r_padded_transformed_values, expected_CX_hover_fuse_padded_values
     )
 )
  
 def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
                      expected_CX_outputs_values, expected_CX_alieron_wing_values, expected_CX_elevator_tail_values, expected_CX_flap_wing_values, expected_CX_ruder_tail_values, expected_CX_tail_values, expected_CX_tail_damp_p_values, expected_CX_tail_damp_q_values, expected_CX_tail_damp_r_values, expected_CX_wing_values, expected_CX_wing_damp_p_values, expected_CX_wing_damp_q_values, expected_CX_wing_damp_r_values, expected_CX_hover_fuse_values, \
                      expected_CX_Scale_values, expected_CX_Scale_p_values, expected_CX_Scale_q_values, expected_CX_Scale_r_values,
-                     expected_wind_transform, expected_tail_transform):
+                     expected_wind_transform, expected_tail_transform, \
+                        expected_CX_tail_padded_transformed_values, expected_CX_tail_damp_p_padded_transformed_values, expected_CX_tail_damp_q_padded_transformed_values, expected_CX_tail_damp_r_padded_transformed_values, expected_CX_wing_padded_transformed_values, expected_CX_wing_damp_p_padded_transformed_values, expected_CX_wing_damp_q_padded_transformed_values, expected_CX_wing_damp_r_padded_transformed_values, expected_CX_hover_fuse_padded_values):
     u = ActuatorOutput(*actuator_outputs_values)
+        
     
     print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")
     
     F1 = mavrik_aero.Cx(u)
     F1_array = jnp.array([F1.Fx, F1.Fy, F1.Fz])
-    CX_outputs_values_close = jnp.allclose(F1_array, expected_CX_outputs_values, atol=1)
+    CX_outputs_values_close = jnp.allclose(F1_array, expected_CX_outputs_values, atol=0.0001)
     print("CX_outputs_values_close???", CX_outputs_values_close)
     if not CX_outputs_values_close:
         print(f"\n  Expected: {expected_CX_outputs_values}\n  Got: {F1_array}")
@@ -164,33 +207,32 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     CX_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
     CX_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
     CX_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
-
-    '''
-    print("CX_Scale_close???", jnp.allclose(CX_Scale, expected_CX_Scale_values, atol=1))
-    if not jnp.allclose(CX_Scale, expected_CX_Scale_values, atol=1):
+ 
+    print("CX_Scale_close???", jnp.allclose(CX_Scale, expected_CX_Scale_values, atol=0.0001))
+    if not jnp.allclose(CX_Scale, expected_CX_Scale_values, atol=0.0001):
         print(f"\n  Expected: {expected_CX_Scale_values}\n  Got: {CX_Scale}")
-    print("CX_Scale_p_close???", jnp.allclose(CX_Scale_p, expected_CX_Scale_p_values, atol=1))
-    if not jnp.allclose(CX_Scale_p, expected_CX_Scale_p_values, atol=1):
+    print("CX_Scale_p_close???", jnp.allclose(CX_Scale_p, expected_CX_Scale_p_values, atol=0.0001))
+    if not jnp.allclose(CX_Scale_p, expected_CX_Scale_p_values, atol=0.0001):
         print(f"\n  Expected: {expected_CX_Scale_p_values}\n  Got: {CX_Scale_p}") 
-    print("CX_Scale_q_close???", jnp.allclose(CX_Scale_q, expected_CX_Scale_q_values, atol=1))
-    if not jnp.allclose(CX_Scale_q, expected_CX_Scale_q_values, atol=1):
+    print("CX_Scale_q_close???", jnp.allclose(CX_Scale_q, expected_CX_Scale_q_values, atol=0.0001))
+    if not jnp.allclose(CX_Scale_q, expected_CX_Scale_q_values, atol=0.0001):
         print(f"\n  Expected: {expected_CX_Scale_q_values}\n  Got: {CX_Scale_q}")
-    print("CX_Scale_r_close???", jnp.allclose(CX_Scale_r, expected_CX_Scale_r_values, atol=1))
-    if not jnp.allclose(CX_Scale_r, expected_CX_Scale_r_values, atol=1):
+    print("CX_Scale_r_close???", jnp.allclose(CX_Scale_r, expected_CX_Scale_r_values, atol=0.0001))
+    if not jnp.allclose(CX_Scale_r, expected_CX_Scale_r_values, atol=0.0001):
         print(f"\n  Expected: {expected_CX_Scale_r_values}\n  Got: {CX_Scale_r}") 
-    '''
+     
     wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
     tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
     
     '''
-    print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=1))
-    if not jnp.allclose(wing_transform, expected_wind_transform, atol=1):
+    print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=0.0001))
+    if not jnp.allclose(wing_transform, expected_wind_transform, atol=0.0001):
         print(f"\n  Expected: {expected_wind_transform}\n  Got: {wing_transform}")
         max_diff_index_wing_transform = jnp.argmax(jnp.abs(wing_transform - expected_wind_transform))
         print(f"\n  Max difference in wing_transform at index {max_diff_index_wing_transform}: Expected {expected_wind_transform[max_diff_index_wing_transform]}, Got {wing_transform[max_diff_index_wing_transform]}")
 
-    print("tail_transform_close???", jnp.allclose(tail_transform, expected_tail_transform, atol=1))
-    if not jnp.allclose(tail_transform, expected_tail_transform, atol=1):
+    print("tail_transform_close???", jnp.allclose(tail_transform, expected_tail_transform, atol=0.0001))
+    if not jnp.allclose(tail_transform, expected_tail_transform, atol=0.0001):
         print(f"\n  Expected: {expected_tail_transform}\n  Got: {tail_transform}")
         max_diff_index_tail_transform = jnp.argmax(jnp.abs(tail_transform - expected_tail_transform))
         print(f"\n  Max difference in tail_transform at index {max_diff_index_tail_transform}: Expected {expected_tail_transform[max_diff_index_tail_transform]}, Got {tail_transform[max_diff_index_tail_transform]}")
@@ -199,7 +241,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     CX_aileron_wing = mavrik_aero.CX_aileron_wing_lookup_table(jnp.array([
         u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
     ]))
-    CX_aileron_wing_close =  jnp.allclose(CX_aileron_wing, expected_CX_alieron_wing_values, atol=1)
+    CX_aileron_wing_close =  jnp.allclose(CX_aileron_wing, expected_CX_alieron_wing_values, atol=0.0001)
     CX_aileron_wing_padded = jnp.array([CX_aileron_wing, 0.0, 0.0])
     CX_aileron_wing_padded_transformed = jnp.dot(wing_transform, CX_aileron_wing_padded * CX_Scale)    
     
@@ -281,99 +323,137 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     CX_hover_fuse = mavrik_aero.CX_hover_fuse_lookup_table(jnp.array([
         u.U, u.alpha, u.beta
     ]))
-    CX_hover_fuse_padded = jnp.array([CX_hover_fuse, 0.0, 0.0])
-     
-    '''
+    CX_hover_fuse_padded = jnp.array([CX_hover_fuse * CX_Scale, 0.0, 0.0])
+   
+    
+    CX_aileron_wing_close = jnp.allclose(CX_aileron_wing, expected_CX_alieron_wing_values, atol=0.0001)
     print("CX_aileron_wing_close???", CX_aileron_wing_close)
     if not CX_aileron_wing_close:
         print(f"\n  Expected: {expected_CX_alieron_wing_values}\n  Got: {CX_aileron_wing}")
         max_diff_index_CX_aileron_wing = jnp.argmax(jnp.abs(CX_aileron_wing - expected_CX_alieron_wing_values))
         print(f"\n  Max difference in CX_aileron_wing at index {max_diff_index_CX_aileron_wing}: Expected {expected_CX_alieron_wing_values[max_diff_index_CX_aileron_wing]}, Got {CX_aileron_wing[max_diff_index_CX_aileron_wing]}")
-
-    CX_elevator_tail_close = jnp.allclose(CX_elevator_tail, expected_CX_elevator_tail_values, atol=1)
+    CX_aileron_wing_padded_transformed_values_close = jnp.allclose(CX_aileron_wing_padded_transformed, expected_CX_aileron_wing_padded_transformed_values, atol=0.0001)
+    print("CX_aileron_wing_padded_transformed_values_close???", CX_aileron_wing_padded_transformed_values_close)
+    
+    CX_elevator_tail_close = jnp.allclose(CX_elevator_tail, expected_CX_elevator_tail_values, atol=0.0001)
     print("CX_elevator_tail_close???", CX_elevator_tail_close)
     if not CX_elevator_tail_close:
         print(f"\n  Expected: {expected_CX_elevator_tail_values}\n  Got: {CX_elevator_tail}")
         max_diff_index_CX_elevator_tail = jnp.argmax(jnp.abs(CX_elevator_tail - expected_CX_elevator_tail_values))
         print(f"\n  Max difference in CX_elevator_tail at index {max_diff_index_CX_elevator_tail}: Expected {expected_CX_elevator_tail_values[max_diff_index_CX_elevator_tail]}, Got {CX_elevator_tail[max_diff_index_CX_elevator_tail]}")
-
-    CX_flap_wing_close = jnp.allclose(CX_flap_wing, expected_CX_flap_wing_values, atol=1)
+    CX_elevator_tail_padded_transformed_values_close = jnp.allclose(CX_elevator_tail_padded_transformed, expected_CX_elevator_tail_padded_transformed_values, atol=0.0001)
+    print("CX_elevator_tail_padded_transformed_values_close???", CX_elevator_tail_padded_transformed_values_close)
+     
+    CX_flap_wing_close = jnp.allclose(CX_flap_wing, expected_CX_flap_wing_values, atol=0.0001)
     print("CX_flap_wing_close???", CX_flap_wing_close)
     if not CX_flap_wing_close:
         print(f"\n  Expected: {expected_CX_flap_wing_values}\n  Got: {CX_flap_wing}")
         max_diff_index_CX_flap_wing = jnp.argmax(jnp.abs(CX_flap_wing - expected_CX_flap_wing_values))
         print(f"\n  Max difference in CX_flap_wing at index {max_diff_index_CX_flap_wing}: Expected {expected_CX_flap_wing_values[max_diff_index_CX_flap_wing]}, Got {CX_flap_wing[max_diff_index_CX_flap_wing]}")
-
-    CX_rudder_tail_close = jnp.allclose(CX_rudder_tail, expected_CX_ruder_tail_values, atol=1)
+    CX_flap_wing_padded_transformed_values_close = jnp.allclose(CX_flap_wing_padded_transformed, expected_CX_flap_wing_padded_transformed_values, atol=0.0001)  
+    print("CX_flap_wing_padded_transformed_values_close???", CX_flap_wing_padded_transformed_values_close)
+    
+    
+    CX_rudder_tail_close = jnp.allclose(CX_rudder_tail, expected_CX_ruder_tail_values, atol=0.0001)
     print("CX_rudder_tail_close???", CX_rudder_tail_close)
     if not CX_rudder_tail_close:
         print(f"\n  Expected: {expected_CX_ruder_tail_values}\n  Got: {CX_rudder_tail}")
         max_diff_index_CX_rudder_tail = jnp.argmax(jnp.abs(CX_rudder_tail - expected_CX_ruder_tail_values))
         print(f"\n  Max difference in CX_rudder_tail at index {max_diff_index_CX_rudder_tail}: Expected {expected_CX_ruder_tail_values[max_diff_index_CX_rudder_tail]}, Got {CX_rudder_tail[max_diff_index_CX_rudder_tail]}")
-
-    CX_tail_close = jnp.allclose(CX_tail, expected_CX_tail_values, atol=1)
+    CX_rudder_tail_padded_transformed_values_close = jnp.allclose(CX_rudder_tail_padded_transformed, expected_CX_ruder_tail_padded_transformed_values, atol=0.0001)
+    print("CX_rudder_tail_padded_transformed_values_close???", CX_rudder_tail_padded_transformed_values_close)
+     
+    CX_tail_close = jnp.allclose(CX_tail, expected_CX_tail_values, atol=0.0001)
     print("CX_tail_close???", CX_tail_close)
     if not CX_tail_close:
         print(f"\n  Expected: {expected_CX_tail_values}\n  Got: {CX_tail}")
         max_diff_index_CX_tail = jnp.argmax(jnp.abs(CX_tail - expected_CX_tail_values))
         print(f"\n  Max difference in CX_tail at index {max_diff_index_CX_tail}: Expected {expected_CX_tail_values[max_diff_index_CX_tail]}, Got {CX_tail[max_diff_index_CX_tail]}")
+    CX_tail_padded_transformed_values_close = jnp.allclose(CX_tail_padded_transformed, expected_CX_tail_padded_transformed_values, atol=0.0001)
+    print("CX_tail_padded_transformed_values_close???", CX_tail_padded_transformed_values_close)
+    if not CX_tail_padded_transformed_values_close:
+        print(f"\n  Expected: {expected_CX_tail_padded_transformed_values}\n  Got: {CX_tail_padded_transformed}")
 
-    CX_tail_damp_p_close = jnp.allclose(CX_tail_damp_p, expected_CX_tail_damp_p_values, atol=1)
+
+    CX_tail_damp_p_close = jnp.allclose(CX_tail_damp_p, expected_CX_tail_damp_p_values, atol=0.0001)
     print("CX_tail_damp_p_close???", CX_tail_damp_p_close)
     if not CX_tail_damp_p_close:
         print(f"\n  Expected: {expected_CX_tail_damp_p_values}\n  Got: {CX_tail_damp_p}")
         max_diff_index_CX_tail_damp_p = jnp.argmax(jnp.abs(CX_tail_damp_p - expected_CX_tail_damp_p_values))
         print(f"\n  Max difference in CX_tail_damp_p at index {max_diff_index_CX_tail_damp_p}: Expected {expected_CX_tail_damp_p_values[max_diff_index_CX_tail_damp_p]}, Got {CX_tail_damp_p[max_diff_index_CX_tail_damp_p]}")
-
-    CX_tail_damp_q_close = jnp.allclose(CX_tail_damp_q, expected_CX_tail_damp_q_values, atol=1)
+    CX_tail_damp_p_padded_transformed_values_close = jnp.allclose(CX_tail_damp_p_padded_transformed, expected_CX_tail_damp_p_padded_transformed_values, atol=0.0001)
+    print("CX_tail_damp_p_padded_transformed_values_close???", CX_tail_damp_p_padded_transformed_values_close)
+     
+    CX_tail_damp_q_close = jnp.allclose(CX_tail_damp_q, expected_CX_tail_damp_q_values, atol=0.0001)
     print("CX_tail_damp_q_close???", CX_tail_damp_q_close)
     if not CX_tail_damp_q_close:
         print(f"\n  Expected: {expected_CX_tail_damp_q_values}\n  Got: {CX_tail_damp_q}")
         max_diff_index_CX_tail_damp_q = jnp.argmax(jnp.abs(CX_tail_damp_q - expected_CX_tail_damp_q_values))
         print(f"\n  Max difference in CX_tail_damp_q at index {max_diff_index_CX_tail_damp_q}: Expected {expected_CX_tail_damp_q_values[max_diff_index_CX_tail_damp_q]}, Got {CX_tail_damp_q[max_diff_index_CX_tail_damp_q]}")
-
-    CX_tail_damp_r_close = jnp.allclose(CX_tail_damp_r, expected_CX_tail_damp_r_values, atol=1)
+    CX_tail_damp_q_padded_transformed_values_close = jnp.allclose(CX_tail_damp_q_padded_transformed, expected_CX_tail_damp_q_padded_transformed_values, atol=0.0001)
+    print("CX_tail_damp_q_padded_transformed_values_close???", CX_tail_damp_q_padded_transformed_values_close)
+    if not CX_tail_damp_q_padded_transformed_values_close:
+        print(f"\n  Expected: {expected_CX_tail_damp_q_padded_transformed_values}\n  Got: {CX_tail_damp_q_padded_transformed}")
+     
+    CX_tail_damp_r_close = jnp.allclose(CX_tail_damp_r, expected_CX_tail_damp_r_values, atol=0.0001)
     print("CX_tail_damp_r_close???", CX_tail_damp_r_close)
     if not CX_tail_damp_r_close:
         print(f"\n  Expected: {expected_CX_tail_damp_r_values}\n  Got: {CX_tail_damp_r}")
         max_diff_index_CX_tail_damp_r = jnp.argmax(jnp.abs(CX_tail_damp_r - expected_CX_tail_damp_r_values))
         print(f"\n  Max difference in CX_tail_damp_r at index {max_diff_index_CX_tail_damp_r}: Expected {expected_CX_tail_damp_r_values[max_diff_index_CX_tail_damp_r]}, Got {CX_tail_damp_r[max_diff_index_CX_tail_damp_r]}")
-
-    CX_wing_close = jnp.allclose(CX_wing, expected_CX_wing_values, atol=1)
+    CX_tail_damp_r_padded_transformed_values_close = jnp.allclose(CX_tail_damp_r_padded_transformed, expected_CX_tail_damp_r_padded_transformed_values, atol=0.0001)
+    print("CX_tail_damp_r_padded_transformed_values_close???", CX_tail_damp_r_padded_transformed_values_close)
+     
+    CX_wing_close = jnp.allclose(CX_wing, expected_CX_wing_values, atol=0.0001)
     print("CX_wing_close???", CX_wing_close)
     if not CX_wing_close:
         print(f"\n  Expected: {expected_CX_wing_values}\n  Got: {CX_wing}")
         max_diff_index_CX_wing = jnp.argmax(jnp.abs(CX_wing - expected_CX_wing_values))
         print(f"\n  Max difference in CX_wing at index {max_diff_index_CX_wing}: Expected {expected_CX_wing_values[max_diff_index_CX_wing]}, Got {CX_wing[max_diff_index_CX_wing]}")
-
-    CX_wing_damp_p_close = jnp.allclose(CX_wing_damp_p, expected_CX_wing_damp_p_values, atol=1)
+    CX_wing_padded_transformed_values_close = jnp.allclose(CX_wing_padded_transformed, expected_CX_wing_padded_transformed_values, atol=0.0001)
+    print("CX_wing_padded_transformed_values_close???", CX_wing_padded_transformed_values_close)
+    
+    CX_wing_damp_p_close = jnp.allclose(CX_wing_damp_p, expected_CX_wing_damp_p_values, atol=0.0001)
     print("CX_wing_damp_p_close???", CX_wing_damp_p_close)
     if not CX_wing_damp_p_close:
         print(f"\n  Expected: {expected_CX_wing_damp_p_values}\n  Got: {CX_wing_damp_p}")
         max_diff_index_CX_wing_damp_p = jnp.argmax(jnp.abs(CX_wing_damp_p - expected_CX_wing_damp_p_values))
         print(f"\n  Max difference in CX_wing_damp_p at index {max_diff_index_CX_wing_damp_p}: Expected {expected_CX_wing_damp_p_values[max_diff_index_CX_wing_damp_p]}, Got {CX_wing_damp_p[max_diff_index_CX_wing_damp_p]}")
-
-    CX_wing_damp_q_close = jnp.allclose(CX_wing_damp_q, expected_CX_wing_damp_q_values, atol=1)
+    CX_wing_damp_p_padded_transformed_values_close = jnp.allclose(CX_wing_damp_p_padded_transformed, expected_CX_wing_damp_p_padded_transformed_values, atol=0.0001)
+    print("CX_wing_damp_p_padded_transformed_values_close???", CX_wing_damp_p_padded_transformed_values_close)
+     
+    CX_wing_damp_q_close = jnp.allclose(CX_wing_damp_q, expected_CX_wing_damp_q_values, atol=0.0001)
     print("CX_wing_damp_q_close???", CX_wing_damp_q_close)
     if not CX_wing_damp_q_close:
         print(f"\n  Expected: {expected_CX_wing_damp_q_values}\n  Got: {CX_wing_damp_q}")
         max_diff_index_CX_wing_damp_q = jnp.argmax(jnp.abs(CX_wing_damp_q - expected_CX_wing_damp_q_values))
         print(f"\n  Max difference in CX_wing_damp_q at index {max_diff_index_CX_wing_damp_q}: Expected {expected_CX_wing_damp_q_values[max_diff_index_CX_wing_damp_q]}, Got {CX_wing_damp_q[max_diff_index_CX_wing_damp_q]}")
-
-    CX_wing_damp_r_close = jnp.allclose(CX_wing_damp_r, expected_CX_wing_damp_r_values, atol=1)
+    CX_wing_damp_q_padded_transformed_values_close = jnp.allclose(CX_wing_damp_q_padded_transformed, expected_CX_wing_damp_q_padded_transformed_values, atol=0.0001)
+    print("CX_wing_damp_q_padded_transformed_values_close???", CX_wing_damp_q_padded_transformed_values_close)
+    if not CX_wing_damp_q_padded_transformed_values_close:
+        print(f"\n  Expected: {expected_CX_wing_damp_q_padded_transformed_values}\n  Got: {CX_wing_damp_q_padded_transformed}")
+     
+    CX_wing_damp_r_close = jnp.allclose(CX_wing_damp_r, expected_CX_wing_damp_r_values, atol=0.0001)
     print("CX_wing_damp_r_close???", CX_wing_damp_r_close)
     if not CX_wing_damp_r_close:
         print(f"\n  Expected: {expected_CX_wing_damp_r_values}\n  Got: {CX_wing_damp_r}")
         max_diff_index_CX_wing_damp_r = jnp.argmax(jnp.abs(CX_wing_damp_r - expected_CX_wing_damp_r_values))
         print(f"\n  Max difference in CX_wing_damp_r at index {max_diff_index_CX_wing_damp_r}: Expected {expected_CX_wing_damp_r_values[max_diff_index_CX_wing_damp_r]}, Got {CX_wing_damp_r[max_diff_index_CX_wing_damp_r]}")
+    CX_wing_damp_r_padded_transformed_values_close = jnp.allclose(CX_wing_damp_r_padded_transformed, expected_CX_wing_damp_r_padded_transformed_values, atol=0.0001)
+    print("CX_wing_damp_r_padded_transformed_values_close???", CX_wing_damp_r_padded_transformed_values_close)
+    if not CX_wing_damp_r_padded_transformed_values_close:
+        print(f"\n  Expected: {expected_CX_wing_damp_r_padded_transformed_values}\n  Got: {CX_wing_damp_r_padded_transformed}")
 
-    CX_hover_fuse_close = jnp.allclose(CX_hover_fuse, expected_CX_hover_fuse_values, atol=1)
+    CX_hover_fuse_close = jnp.allclose(CX_hover_fuse, expected_CX_hover_fuse_values, atol=0.0001)
     print("CX_hover_fuse_close???", CX_hover_fuse_close)
     if not CX_hover_fuse_close:
         print(f"\n  Expected: {expected_CX_hover_fuse_values}\n  Got: {CX_hover_fuse}")
         max_diff_index_CX_hover_fuse = jnp.argmax(jnp.abs(CX_hover_fuse - expected_CX_hover_fuse_values))
         print(f"\n  Max difference in CX_hover_fuse at index {max_diff_index_CX_hover_fuse}: Expected {expected_CX_hover_fuse_values[max_diff_index_CX_hover_fuse]}, Got {CX_hover_fuse[max_diff_index_CX_hover_fuse]}")
-    '''
+    CX_hover_fuse_padded_transformed_values_close = jnp.allclose(CX_hover_fuse_padded, expected_CX_hover_fuse_padded_values, atol=0.0001)
+    print("CX_hover_fuse_padded_transformed_values_close???", CX_hover_fuse_padded_transformed_values_close)
+    if not CX_hover_fuse_padded_transformed_values_close:
+        print(f"\n  Expected: {expected_CX_hover_fuse_padded_values}\n  Got: {CX_hover_fuse_padded}")
 
 
     F1_array = jnp.array([
@@ -383,7 +463,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
             CX_hover_fuse_padded[0],
             CX_aileron_wing_padded_transformed[1] + CX_elevator_tail_padded_transformed[1] + CX_flap_wing_padded_transformed[1] + CX_rudder_tail_padded_transformed[1] +
             CX_tail_padded_transformed[1] + CX_tail_damp_p_padded_transformed[1] + CX_tail_damp_q_padded_transformed[1] + CX_tail_damp_r_padded_transformed[1] +
-            CX_wing_padded_transformed[1] + CX_wing_damp_p_padded_transformed[1] + CX_wing_damp_q_padded_transformed[1] + CX_wing_damp_r_padded_transformed[1] +
+            CX_wing_padded_transformed[1]  + CX_wing_damp_p_padded_transformed[1] + CX_wing_damp_q_padded_transformed[1] + CX_wing_damp_r_padded_transformed[1] +
             CX_hover_fuse_padded[1],
             CX_aileron_wing_padded_transformed[2] + CX_elevator_tail_padded_transformed[2] + CX_flap_wing_padded_transformed[2] + CX_rudder_tail_padded_transformed[2] +
             CX_tail_padded_transformed[2] + CX_tail_damp_p_padded_transformed[2] + CX_tail_damp_q_padded_transformed[2] + CX_tail_damp_r_padded_transformed[2] +
@@ -392,7 +472,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     ])
 
 
-    CX_outputs_values_close = jnp.allclose(F1_array, expected_CX_outputs_values, atol=1)
+    CX_outputs_values_close = jnp.allclose(F1_array, expected_CX_outputs_values, atol=0.0001)
     print("CX_outputs_values_close???", CX_outputs_values_close)
     if not CX_outputs_values_close:
         print(f"\n  Expected: {expected_CX_outputs_values}\n  Got: {F1_array}")

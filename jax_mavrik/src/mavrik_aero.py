@@ -350,7 +350,7 @@ class MavrikAero:
         CX_hover_fuse = self.CX_hover_fuse_lookup_table(jnp.array([
             u.U, u.alpha, u.beta
         ]))
-        CX_hover_fuse_padded = jnp.array([CX_hover_fuse, 0.0, 0.0])
+        CX_hover_fuse_padded = jnp.array([CX_hover_fuse * CX_Scale, 0.0, 0.0])
 
         return Forces(
             CX_aileron_wing_padded_transformed[0] + CX_elevator_tail_padded_transformed[0] + CX_flap_wing_padded_transformed[0] + CX_rudder_tail_padded_transformed[0] +
@@ -768,9 +768,9 @@ class MavrikAero:
 
     def L(self, u: ActuatorOutput) -> Moments:
         Cl_Scale = 0.5744 * 2.8270 * u.Q
-        Cl_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        Cl_Scale_q = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.q
-        Cl_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
+        Cl_Scale_p = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.p
+        Cl_Scale_q = 0.5744 * 2.8270 * 0.2032 * 1.225 * 0.25 * u.U * u.q
+        Cl_Scale_r = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.r
 
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
@@ -1103,10 +1103,10 @@ class MavrikAero:
         
     def N(self, u: ActuatorOutput) -> Moments:
         Cn_Scale = 0.5744 * 2.8270 * u.Q
-        Cn_Scale_p = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.p
+        Cn_Scale_p = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.p
         Cn_Scale_q = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.q
-        Cn_Scale_r = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.r
-
+        Cn_Scale_r = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.r
+        
         wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
         tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 

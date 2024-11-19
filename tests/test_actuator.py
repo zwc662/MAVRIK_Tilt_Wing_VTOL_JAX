@@ -58,8 +58,8 @@ def test_actuator(id, control_inputs, vned, xned, euler, vb, pqr, \
         roll=euler[0], pitch=euler[1], yaw=euler[2],
         VXe=vned[0], VYe=vned[1], VZe=vned[2],
         p=pqr[0], q=pqr[1], r=pqr[2],
-        Fx=0.0, Fy=0.0, Fz=0.0,
-        L=0.0, M=0.0, N=0.0
+        pdot = 0.0, qdot = 0.0, rdot = 0.0,
+        udot = 0.0, vdot = 0.0, wdot = 0.0
     )
     control = control_inputs
     print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")

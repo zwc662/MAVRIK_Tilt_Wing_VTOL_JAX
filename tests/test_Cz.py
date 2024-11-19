@@ -128,7 +128,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     
     F3 = mavrik_aero.Cz(u)
     F3_array = jnp.array([F3.Fx, F3.Fy, F3.Fz])
-    CZ_outputs_values_close = jnp.allclose(F3_array, expected_CZ_outputs_values, atol=1)
+    CZ_outputs_values_close = jnp.allclose(F3_array, expected_CZ_outputs_values, atol=0.001)
     print("CZ_outputs_values_close???", CZ_outputs_values_close)
     if not CZ_outputs_values_close:
         print(f"\n  Expected: {expected_CZ_outputs_values}\n  Got: {F3_array}")
@@ -142,30 +142,30 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     CZ_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
     
-    print("CZ_Scale_close???", jnp.allclose(CZ_Scale, expected_CZ_Scale_values, atol=1))
-    if not jnp.allclose(CZ_Scale, expected_CZ_Scale_values, atol=1):
+    print("CZ_Scale_close???", jnp.allclose(CZ_Scale, expected_CZ_Scale_values, atol=0.001))
+    if not jnp.allclose(CZ_Scale, expected_CZ_Scale_values, atol=0.001):
         print(f"\n  Expected: {expected_CZ_Scale_values}\n  Got: {CZ_Scale}")
-    print("CZ_Scale_p_close???", jnp.allclose(CZ_Scale_p, expected_CZ_Scale_p_values, atol=1))
-    if not jnp.allclose(CZ_Scale_p, expected_CZ_Scale_p_values, atol=1):
+    print("CZ_Scale_p_close???", jnp.allclose(CZ_Scale_p, expected_CZ_Scale_p_values, atol=0.001))
+    if not jnp.allclose(CZ_Scale_p, expected_CZ_Scale_p_values, atol=0.001):
         print(f"\n  Expected: {expected_CZ_Scale_p_values}\n  Got: {CZ_Scale_p}") 
-    print("CZ_Scale_q_close???", jnp.allclose(CZ_Scale_q, expected_CZ_Scale_q_values, atol=1))
-    if not jnp.allclose(CZ_Scale_q, expected_CZ_Scale_q_values, atol=1):
+    print("CZ_Scale_q_close???", jnp.allclose(CZ_Scale_q, expected_CZ_Scale_q_values, atol=0.001))
+    if not jnp.allclose(CZ_Scale_q, expected_CZ_Scale_q_values, atol=0.001):
         print(f"\n  Expected: {expected_CZ_Scale_q_values}\n  Got: {CZ_Scale_q}")
-    print("CZ_Scale_r_close???", jnp.allclose(CZ_Scale_r, expected_CZ_Scale_r_values, atol=1))
-    if not jnp.allclose(CZ_Scale_r, expected_CZ_Scale_r_values, atol=1):
+    print("CZ_Scale_r_close???", jnp.allclose(CZ_Scale_r, expected_CZ_Scale_r_values, atol=0.001))
+    if not jnp.allclose(CZ_Scale_r, expected_CZ_Scale_r_values, atol=0.001):
         print(f"\n  Expected: {expected_CZ_Scale_r_values}\n  Got: {CZ_Scale_r}") 
    
     wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
     tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
-    print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=1))
-    if not jnp.allclose(wing_transform, expected_wind_transform, atol=1):
+    print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=0.001))
+    if not jnp.allclose(wing_transform, expected_wind_transform, atol=0.001):
         print(f"\n  Expected: {expected_wind_transform}\n  Got: {wing_transform}")
         max_diff_index_wing_transform = jnp.argmax(jnp.abs(wing_transform - expected_wind_transform))
         print(f"\n  Max difference in wing_transform at index {max_diff_index_wing_transform}: Expected {expected_wind_transform[max_diff_index_wing_transform]}, Got {wing_transform[max_diff_index_wing_transform]}")
 
-    print("tail_transform_close???", jnp.allclose(tail_transform, expected_tail_transform, atol=1))
-    if not jnp.allclose(tail_transform, expected_tail_transform, atol=1):
+    print("tail_transform_close???", jnp.allclose(tail_transform, expected_tail_transform, atol=0.001))
+    if not jnp.allclose(tail_transform, expected_tail_transform, atol=0.001):
         print(f"\n  Expected: {expected_tail_transform}\n  Got: {tail_transform}")
         max_diff_index_tail_transform = jnp.argmax(jnp.abs(tail_transform - expected_tail_transform))
         print(f"\n  Max difference in tail_transform at index {max_diff_index_tail_transform}: Expected {expected_tail_transform[max_diff_index_tail_transform]}, Got {tail_transform[max_diff_index_tail_transform]}")
@@ -274,7 +274,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     ])
 
 
-    CZ_outputs_values_close = jnp.allclose(F3_array, expected_CZ_outputs_values, atol=1)
+    CZ_outputs_values_close = jnp.allclose(F3_array, expected_CZ_outputs_values, atol=0.001)
     print("CZ_outputs_values_close???", CZ_outputs_values_close)
     if not CZ_outputs_values_close:
         print(f"\n  Expected: {expected_CZ_outputs_values}\n  Got: {F3_array}")
