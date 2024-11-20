@@ -177,9 +177,9 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
         Xe=xned[0], Ye=xned[1], Ze=xned[2],
         roll=euler[0], pitch=euler[1], yaw=euler[2],
         VXe=vned[0], VYe=vned[1], VZe=vned[2],
-        p=pqr[0], q=pqr[1], r=pqr[2],
-        pdot = 0, qdot = 0, rdot = 0,
-        udot = 0, vdot = 0, wdot = 0
+        p=pqr[0], q=pqr[1], r=pqr[2], 
+        Fx = 0, Fy = 0, Fz = 0,
+        L = 0, M = 0, N = 0
     )
 
     forces, moments, actuator_outputs = mavrik_aero(state, control_inputs)
@@ -211,22 +211,25 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
         max_diff_index = jnp.argmax(jnp.abs(actuator_outputs_array - expected_actuator_outputs_values))
         print(f"\n  Max difference at index {max_diff_index}: Expected {expected_actuator_outputs_values[max_diff_index]}, Got {actuator_outputs_array[max_diff_index]}\n\n")
      
+    wing_transform = jnp.array([[jnp.cos(actuator_outputs.wing_tilt), 0, jnp.sin(actuator_outputs.wing_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.wing_tilt), 0., jnp.cos(actuator_outputs.wing_tilt)]]);
+    tail_transform = jnp.array([[jnp.cos(actuator_outputs.tail_tilt), 0, jnp.sin(actuator_outputs.tail_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.tail_tilt), 0., jnp.cos(actuator_outputs.tail_tilt)]])
 
-    F0, M0 = mavrik_aero.Ct(actuator_outputs)
+    
+    F0, M0 = mavrik_aero.Ct(actuator_outputs, wing_transform, tail_transform)
     Ct_array = jnp.array([F0.Fx, F0.Fy, F0.Fz, M0.L, M0.M, M0.N])
-    F1 = mavrik_aero.Cx(actuator_outputs)
+    F1 = mavrik_aero.Cx(actuator_outputs, wing_transform, tail_transform)
     Cx_array = jnp.array([F1.Fx, F1.Fy, F1.Fz])
-    F2 = mavrik_aero.Cy(actuator_outputs)
+    F2 = mavrik_aero.Cy(actuator_outputs, wing_transform, tail_transform)
     Cy_array = jnp.array([F2.Fx, F2.Fy, F2.Fz])
-    F3 = mavrik_aero.Cz(actuator_outputs)
+    F3 = mavrik_aero.Cz(actuator_outputs, wing_transform, tail_transform)
     Cz_array = jnp.array([F3.Fx, F3.Fy, F3.Fz])
-    M1 = mavrik_aero.L(actuator_outputs)
+    M1 = mavrik_aero.L(actuator_outputs, wing_transform, tail_transform)
     Cl_array = jnp.array([M1.L, M1.M, M1.N])
-    M2 = mavrik_aero.M(actuator_outputs)
+    M2 = mavrik_aero.M(actuator_outputs, wing_transform, tail_transform)
     Cm_array = jnp.array([M2.L, M2.M, M2.N])
-    M3 = mavrik_aero.N(actuator_outputs)
+    M3 = mavrik_aero.N(actuator_outputs, wing_transform, tail_transform)
     Cn_array = jnp.array([M3.L, M3.M, M3.N])
-    M5 = mavrik_aero.Kq(actuator_outputs)
+    M5 = mavrik_aero.Kq(actuator_outputs, wing_transform, tail_transform)
     Kq_array = jnp.array([M5.L, M5.M, M5.N])
     
 

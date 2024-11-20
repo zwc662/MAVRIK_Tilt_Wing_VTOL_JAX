@@ -15,6 +15,9 @@ pyarrow = "^18.0.0"
 matplotlib = "^3.9.2"
 pandas = "^2.2.3"
 jaxtyping = "^0.2.34"
+gym = "^0.26.2"
+optax = "^0.2.4"
+flax = "^0.10.2"
 
 
 [build-system]

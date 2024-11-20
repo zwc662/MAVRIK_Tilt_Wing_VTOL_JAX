@@ -2,7 +2,8 @@
 from jax_mavrik.src.simulator import Simulator
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.mavrik_types import ControlInputs, StateArr, ControlArr
-from jax_mavrik.mavrik_types import StateVariables, ControlInputs
+from jax_mavrik.mavrik_types import StateVariables, ControlInputs, MAVRIK_STATE
+from jax_mavrik.src.utils.mat_tools import euler_to_dcm
 
 import numpy as np 
 from typing import Dict, Any, Tuple, Optional, Union
@@ -11,6 +12,7 @@ import time
 import os
 
 import jax.numpy as jnp 
+import jax 
 
 current_file_path = os.path.dirname(os.path.abspath(__file__))
 _MAVRIK_SETUP_ = MavrikSetup(file_path=os.path.join(current_file_path, "aero_export.mat"))
@@ -23,6 +25,8 @@ class Mavrik:
         self.control_ndim = 20
         self.control = None 
         self.dt = dt
+        self.ned2xyz = lambda euler, ned: euler_to_dcm(*euler) @ ned
+        self.STATE = MAVRIK_STATE
  
     def step(self, state: StateArr, control: ControlArr): # -> jnp.ndarray:
         if state is None or control is None:
@@ -38,21 +42,8 @@ class Mavrik:
 # Example usage
 if __name__ == "__main__":
      
-    U = 30  # trim speed
-    eulerIn = [0,0.069813,0]  # trim attitude (roll, pitch, yaw)
-    vnedIn = [30., 0., 0.]  # NED velocity
-    # Convert NED velocity to body frame velocity
-   
-    state = np.array([
-        *vnedIn,  # VXe, VYe, VZe
-        0.0, 0.0, 0.0,  # Xe Ye Ze
-        29.9269, 0.0, 2.0927, # u v w
-        *eulerIn,   # roll, pitch, yaw 
-        0.0, 0.0, 0.0,   # p, q, r
-        0.0, 0.0, 0.0,   # Fx, Fy, Fz
-        0.0, 0.0, 0.0    # L, M, N
-    ])
-
+    
+    
     control = np.array([
         0.0, 0.0, 0.0,  # wing_tilt, tail_tilt, aileron
         0.0, 0.0, 0.0,  # elevator, flap, rudder
@@ -64,6 +55,76 @@ if __name__ == "__main__":
         7500.0, 7500.0,  # RPM_right9, RPM_right10
         7500.0, 7500.0   # RPM_right11, RPM_right12Out
     ])
+
+    ## vned=state[:3]
+    expected_vned = np.array([
+        [30.0000, 0, 0],
+        [29.9568, -0.0000, -0.0997],
+        [29.9143, -0.0000, -0.1922],
+        [29.8730, -0.0001, -0.2767],
+        [29.8329, -0.0002, -0.3529],
+        [29.7944, -0.0004, -0.4203],
+        [29.7574, -0.0006, -0.4789],
+        [29.7222, -0.0009, -0.5286],
+        [29.6886, -0.0014, -0.5692],
+        [29.6565, -0.0019, -0.6011],
+        [29.6261, -0.0024, -0.6243]
+    ])
+
+    # xned = state[:3]
+    expected_xned = np.array([
+        [0.0000, 0.0000, 0.0000],
+        [0.2998, -0.0000, -0.0005],
+        [0.5991, -0.0000, -0.0020],
+        [0.8981, -0.0000, -0.0043],
+        [1.1966, -0.0000, -0.0075],
+        [1.4947, -0.0000, -0.0114],
+        [1.7925, -0.0000, -0.0159],
+        [2.0899, -0.0000, -0.0209],
+        [2.3869, -0.0000, -0.0264],
+        [2.6837, -0.0000, -0.0323],
+        [2.9801, -0.0001, -0.0384]
+    ])
+
+    expected_vb = np.array([
+        [29.9269, 0, 2.0927],
+        [29.8923, -0.0001, 1.9667],
+        [29.8605, -0.0004, 1.8037],
+        [29.8309, -0.0010, 1.6083],
+        [29.8028, -0.0017, 1.3853],
+        [29.7755, -0.0027, 1.1393],
+        [29.7484, -0.0038, 0.8750],
+        [29.7209, -0.0053, 0.5969],
+        [29.6924, -0.0069, 0.3092],
+        [29.6626, -0.0089, 0.0163],
+        [29.6313, -0.0111, -0.2781]
+    ])
+
+    expected_euler = np.array([
+        [0, 0.0698, 0],
+        [-0.0000, 0.0690, 0.0000],
+        [-0.0002, 0.0668, 0.0000],
+        [-0.0003, 0.0631, 0.0000],
+        [-0.0006, 0.0583, 0.0000],
+        [-0.0010, 0.0524, 0.0000],
+        [-0.0014, 0.0455, 0.0001],
+        [-0.0019, 0.0379, 0.0001],
+        [-0.0025, 0.0296, 0.0002],
+        [-0.0032, 0.0208, 0.0002],
+        [-0.0040, 0.0117, 0.0003]
+    ])
+   
+    state = np.array([
+        *expected_vned[0],  # VXe, VYe, VZe
+        *expected_xned[0],  # Xe Ye Ze
+        *expected_vb[0], # u v w
+        *expected_euler[0],   # roll, pitch, yaw 
+        0.0, 0.0, 0.0,   # p, q, r
+        0.0, 0.0, 0.0,   # Fx, Fy, Fz
+        0.0, 0.0, 0.0    # L, M, N
+    ])
+
+    
 
     mavrik = Mavrik()
     
@@ -77,7 +138,18 @@ if __name__ == "__main__":
         runtime = end_time - start_time
         tot_runtime += runtime
         states.append(state)
-        print(f"[Iteration {i}] Runtime: {runtime:.6f} | Tot: {tot_runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds | State.: {info['state']}")
-    
-
+        print(f">>>>>>>>>>>>>>>>>>>> Iteration: {i} <<<<<<<<<<<<<<<<<<<<<<")
+        print(f"Runtime: {runtime:.6f} | Tot: {tot_runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds")
+        vned = state[MAVRIK_STATE.VXe:MAVRIK_STATE.VXe+3]
+        print(f"Vned: {vned} | Expected Vned: {expected_vned[i + 1]} | Error: {np.linalg.norm(vned - expected_vned[i + 1])}")
+        xned = state[MAVRIK_STATE.Xe:MAVRIK_STATE.Xe+3]
+        print(f"Xned: {xned} | Expected Xned: {expected_xned[i + 1]} | Error: {np.linalg.norm(xned - expected_xned[i + 1])}")
+        vb = state[MAVRIK_STATE.u:MAVRIK_STATE.u+3]
+        print(f"Vb: {vb} | Expected Vb: {expected_vb[i + 1]} | Error: {np.linalg.norm(vb - expected_vb[i + 1])}")
+        euler = state[MAVRIK_STATE.roll:MAVRIK_STATE.roll+3]
+        print(f"Euler: {euler} | Expected Euler: {expected_euler[i + 1]} | Error: {np.linalg.norm(euler - expected_euler[i + 1])}")
+         
+        expected_dcm = euler_to_dcm(*expected_euler[i+1])
+        vned_transformed = expected_dcm @ expected_vned[i+1]
+        print(f"DCM @ Expected Vned: {vned_transformed} | Expected Vb: {expected_vb[i + 1]} | Error: {np.linalg.norm(vned_transformed - expected_vb[i + 1])}")
     #print("States:", states)

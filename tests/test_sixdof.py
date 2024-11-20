@@ -45,28 +45,27 @@ def test_sixdof(id, rigid_body, vned, xned, euler, vb, pqr, forces, moments,
     #if not vb_close:
     #    expected_vned = euler_to_dcm(*euler).T @ vb
 
-
-
+ 
     initial_state = SixDOFState(
-        Xe=xned, 
+        Xned=xned, 
         Vb=vb,
         Euler=euler,
         pqr=pqr,
-        Ve=vned, 
+        Vned=vned, 
     )
  
     
     dynamics = SixDOFDynamics(rigid_body, method="rk4", fixed_step_size=0.01)
     nxt_state, _ = dynamics.run_simulation(initial_state, forces, moments, 0.01)
-    nxt_xned = nxt_state.Xe
+    nxt_xned = nxt_state.Xned
     nxt_vb = nxt_state.Vb
     nxt_euler = nxt_state.Euler
     nxt_pqr = nxt_state.pqr
-    nxt_vned = nxt_state.Ve
+    nxt_vned = nxt_state.Vned
     
     
-    print(f"Ve Expected: {expected_vned}, Got: {nxt_vned}, Close: {jnp.allclose(expected_vned, nxt_vned, atol=threshold)}, Max Error: {jnp.max(jnp.abs(expected_vned - nxt_vned))}")
-    print(f"Xe Expected: {expected_xned}, Got: {nxt_xned}, Close: {jnp.allclose(expected_xned, nxt_xned, atol=threshold)}, Max Error: {jnp.max(jnp.abs(expected_xned - nxt_xned))}")
+    print(f"Vned Expected: {expected_vned}, Got: {nxt_vned}, Close: {jnp.allclose(expected_vned, nxt_vned, atol=threshold)}, Max Error: {jnp.max(jnp.abs(expected_vned - nxt_vned))}")
+    print(f"Xned Expected: {expected_xned}, Got: {nxt_xned}, Close: {jnp.allclose(expected_xned, nxt_xned, atol=threshold)}, Max Error: {jnp.max(jnp.abs(expected_xned - nxt_xned))}")
     print(f"Vb Expected: {expected_vb}, Got: {nxt_vb}, Close: {jnp.allclose(expected_vb, nxt_vb, atol=threshold)}, Max Error: {jnp.max(jnp.abs(expected_vb - nxt_vb))}")
     print(f"Euler Expected: {expected_euler}, Got: {nxt_euler}, Close: {jnp.allclose(expected_euler, nxt_euler, atol=threshold)}, Max Error: {jnp.max(jnp.abs(expected_euler - nxt_euler))}")
     print(f"pqr Expected: {expected_pqr}, Got: {nxt_pqr}, Close: {jnp.allclose(expected_pqr, nxt_pqr, atol=threshold)}, Max Error: {jnp.max(jnp.abs(expected_pqr - nxt_pqr))}")

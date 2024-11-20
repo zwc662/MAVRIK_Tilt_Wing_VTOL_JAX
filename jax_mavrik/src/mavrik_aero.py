@@ -6,15 +6,13 @@ from jax_mavrik.mavrik_types import StateVariables, ControlInputs, AeroState, Fo
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.src.actuator import ActuatorInutState, ActuatorInput, ActuatorOutput, actuate
 from jax_mavrik.src.utils.mat_tools import euler_to_dcm
+from jax_mavrik.src.utils.jax_types import FloatScalar
 
 import jax.numpy as jnp
 from jax import jit
 from jax import vmap
 
-from typing import Tuple, List
-from jax_mavrik.mavrik_types import StateVariables, ControlInputs
-from jax_mavrik.mavrik_setup import MavrikSetup
-
+from typing import Tuple, List 
 
 @jit
 def linear_interpolate(v0, v1, weight):
@@ -84,7 +82,7 @@ class JaxNDInterpolator:
 class MavrikAero:
     def __init__(self, mavrik_setup: MavrikSetup):
         self.get_lookup_table(mavrik_setup)
-
+ 
     def __call__(self, state: StateVariables, control: ControlInputs) -> Tuple[Forces, Moments]:
         # Calculate forces and moments using Mavrik Aero model
         # Transform body frame velocities (u, v, w) to inertial frame velocities (Vx, Vy, Vz)
@@ -97,8 +95,8 @@ class MavrikAero:
         # Inertial frame velocities
         inertial_velocities = R @ body_velocities
         u, v, w = inertial_velocities
-        print(f"{inertial_velocities=} vs. {state.u=}, {state.v=}, {state.w=}")
-        print(f"beta_from_inertial_velocity={jnp.arctan2(v, jnp.sqrt(u**2 + w**2))} vs. beta_from_state_vb={jnp.arctan2(state.v, jnp.sqrt(state.u**2 + state.w**2))}")
+        #print(f"{inertial_velocities=} vs. {state.u=}, {state.v=}, {state.w=}")
+        #print(f"beta_from_inertial_velocity={jnp.arctan2(v, jnp.sqrt(u**2 + w**2))} vs. beta_from_state_vb={jnp.arctan2(state.v, jnp.sqrt(state.u**2 + state.w**2))}")
 
         actuator_input_state = ActuatorInutState(
             U = jnp.sqrt(u**2 + v**2 + w**2),
@@ -123,7 +121,11 @@ class MavrikAero:
 
         actuator_outputs: ActuatorOutput = actuate(actuator_input_state, actuator_inputs)
         #print(f"{actuator_outputs=}")
-        F0, M0 = self.Ct(actuator_outputs)
+        wing_transform = jnp.array([[jnp.cos(actuator_outputs.wing_tilt), 0, jnp.sin(actuator_outputs.wing_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.wing_tilt), 0., jnp.cos(actuator_outputs.wing_tilt)]]);
+        tail_transform = jnp.array([[jnp.cos(actuator_outputs.tail_tilt), 0, jnp.sin(actuator_outputs.tail_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.tail_tilt), 0., jnp.cos(actuator_outputs.tail_tilt)]])
+
+    
+        F0, M0 = self.Ct(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F0._asdict().items():
             if jnp.isnan(value).any():
@@ -133,43 +135,43 @@ class MavrikAero:
             if jnp.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
-        F1 = self.Cx(actuator_outputs)
+        F1 = self.Cx(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F1._asdict().items():
             if jnp.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         ''' 
-        F2 = self.Cy(actuator_outputs)
+        F2 = self.Cy(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F2._asdict().items():
             if jnp.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
-        F3 = self.Cz(actuator_outputs)
+        F3 = self.Cz(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F3._asdict().items():
             if jnp.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
-        M1 = self.L(actuator_outputs)
+        M1 = self.L(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M1._asdict().items():
             if jnp.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
-        M2 = self.M(actuator_outputs)
+        M2 = self.M(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M2._asdict().items():
             if jnp.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
-        M3 = self.N(actuator_outputs)
+        M3 = self.N(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M3._asdict().items():
             if jnp.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
-        M5 = self.Kq(actuator_outputs)
+        M5 = self.Kq(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M5._asdict().items():
             if jnp.isnan(value).any():
@@ -256,16 +258,12 @@ class MavrikAero:
         self.CX_hover_fuse_lookup_table = JaxNDInterpolator(CX_hover_fuse_breakpoints, CX_hover_fuse_value)
         
 
-    def Cx(self, u: ActuatorOutput) -> Forces:
+    def Cx(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Forces:
         CX_Scale = 0.5744 * u.Q
         CX_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CX_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
         CX_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
-        wing_transform = jnp.array([[jnp.cos( u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
-        
         CX_aileron_wing = self.CX_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
@@ -421,7 +419,7 @@ class MavrikAero:
         self.CY_hover_fuse_lookup_table = JaxNDInterpolator(CY_hover_fuse_breakpoints, CY_hover_fuse_value)
 
 
-    def Cy(self, u: ActuatorOutput) -> Forces:
+    def Cy(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Forces:
         CY_Scale = 0.5744 * u.Q
         CY_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CY_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
@@ -599,7 +597,7 @@ class MavrikAero:
         CZ_hover_fuse_value = mavrik_setup.CZ_hover_fuse_val
         self.CZ_hover_fuse_lookup_table = JaxNDInterpolator(CZ_hover_fuse_breakpoints, CZ_hover_fuse_value)
     
-    def Cz(self, u: ActuatorOutput) -> Forces:
+    def Cz(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Forces:
         CZ_Scale = 0.5744 * u.Q
         CZ_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CZ_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
@@ -766,15 +764,12 @@ class MavrikAero:
         Cl_hover_fuse_value = mavrik_setup.Cl_hover_fuse_val
         self.Cl_hover_fuse_lookup_table = JaxNDInterpolator(Cl_hover_fuse_breakpoints, Cl_hover_fuse_value)
 
-    def L(self, u: ActuatorOutput) -> Moments:
+    def L(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Moments:
         Cl_Scale = 0.5744 * 2.8270 * u.Q
         Cl_Scale_p = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.p
         Cl_Scale_q = 0.5744 * 2.8270 * 0.2032 * 1.225 * 0.25 * u.U * u.q
         Cl_Scale_r = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.r
-
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
+ 
         Cl_aileron_wing = self.Cl_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
@@ -932,17 +927,11 @@ class MavrikAero:
         Cm_hover_fuse_value = mavrik_setup.Cm_hover_fuse_val
         self.Cm_hover_fuse_lookup_table = JaxNDInterpolator(Cm_hover_fuse_breakpoints, Cm_hover_fuse_value)
 
-    def M(self, u: ActuatorOutput) -> Moments:
+    def M(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Moments:
         Cm_Scale = 0.5744 * 0.2032 * u.Q
         Cm_Scale_p = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.p
         Cm_Scale_q = 0.5744 * 0.2032**2 * 1.225 * 0.25 * u.U * u.q
         Cm_Scale_r = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.r
-
-
-
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
  
         Cm_aileron_wing = self.Cm_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
@@ -1102,15 +1091,12 @@ class MavrikAero:
         self.Cn_hover_fuse_lookup_table = JaxNDInterpolator(Cn_hover_fuse_breakpoints, Cn_hover_fuse_value)
         
         
-    def N(self, u: ActuatorOutput) -> Moments:
+    def N(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Moments:
         Cn_Scale = 0.5744 * 2.8270 * u.Q
         Cn_Scale_p = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.p
         Cn_Scale_q = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.q
         Cn_Scale_r = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.r
-        
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
+       
         Cn_aileron_wing = self.Cn_aileron_wing_lookup_table(jnp.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
@@ -1284,10 +1270,7 @@ class MavrikAero:
         self.RPM_right_11_trans = mavrik_setup.RPM_right_11_trans
         self.RPM_right_12_out_trans = mavrik_setup.RPM_right_12_out_trans 
         
-    def Ct(self, u: ActuatorOutput) -> Tuple[Forces, Moments]:
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
+    def Ct(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Tuple[Forces, Moments]:
         Ct_tail_left = self.Ct_tail_left_lookup_table(jnp.array([
             u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
@@ -1471,10 +1454,7 @@ class MavrikAero:
         Kq_right_12_out_value = mavrik_setup.Kq_right_12_out_val
         self.Kq_right_12_out_lookup_table = JaxNDInterpolator(Kq_right_12_out_breakpoints, Kq_right_12_out_value)
 
-    def Kq(self, u: ActuatorOutput) -> Moments:
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
+    def Kq(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Moments:
         Kq_tail_left = self.Kq_tail_left_lookup_table(jnp.array([
             u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))

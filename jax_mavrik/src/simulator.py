@@ -25,8 +25,8 @@ class Simulator:
         # Calculate forces and moments using Mavrik Aero model
         forces, moments, _ = self.aero_model(state, control) 
         sixdof_state = SixDOFState(
-            Ve=jnp.array([state.VXe, state.VYe, state.VZe]),
-            Xe=jnp.array([state.Xe, state.Ye, state.Ze]),
+            Vned=jnp.array([state.VXe, state.VYe, state.VZe]),
+            Xned=jnp.array([state.Xe, state.Ye, state.Ze]),
             Vb=jnp.array([state.u, state.v, state.w]), 
             Euler=jnp.array([state.roll, state.pitch, state.yaw]),
             pqr=jnp.array([state.p, state.q, state.r])
@@ -37,12 +37,12 @@ class Simulator:
         nxt_sixdof_state, info = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, dt) 
         
         nxt_state = state._replace(
-            VXe = nxt_sixdof_state.Ve[0],
-            VYe = nxt_sixdof_state.Ve[1],
-            VZe = nxt_sixdof_state.Ve[2],
-            Xe = nxt_sixdof_state.Xe[0],
-            Ye = nxt_sixdof_state.Xe[1],
-            Ze = nxt_sixdof_state.Xe[2],
+            VXe = nxt_sixdof_state.Vned[0],
+            VYe = nxt_sixdof_state.Vned[1],
+            VZe = nxt_sixdof_state.Vned[2],
+            Xe = nxt_sixdof_state.Xned[0],
+            Ye = nxt_sixdof_state.Xned[1],
+            Ze = nxt_sixdof_state.Xned[2],
             u = nxt_sixdof_state.Vb[0],
             v = nxt_sixdof_state.Vb[1],
             w = nxt_sixdof_state.Vb[2],

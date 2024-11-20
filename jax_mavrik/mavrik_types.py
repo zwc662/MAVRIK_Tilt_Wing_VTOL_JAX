@@ -4,6 +4,7 @@ import jax.numpy as jnp
 import numpy as np
 
 from typing import NamedTuple
+from enum import IntEnum
 
 
 arr = Union[jnp.ndarray, Array]
@@ -34,7 +35,28 @@ class ControlInputs(NamedTuple):
     RPM_right11: Float
     RPM_right12Out: Float
     
-  
+class MAVRIK_STATE(IntEnum):
+    VXe = 0
+    VYe = 1
+    VZe = 2
+    Xe = 3
+    Ye = 4
+    Ze = 5
+    u = 6
+    v = 7
+    w = 8
+    roll = 9
+    pitch = 10
+    yaw = 11
+    p = 12
+    q = 13
+    r = 14
+    Fx = 15
+    Fy = 16
+    Fz = 17
+    L = 18
+    M = 19
+    N = 20
 
 class StateVariables(NamedTuple):  
     VXe: Float  # Velocity in NED frame1

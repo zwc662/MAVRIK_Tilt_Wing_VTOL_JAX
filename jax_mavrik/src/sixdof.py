@@ -17,11 +17,11 @@ class RigidBody(NamedTuple):
     inertia: Float
 
 class SixDOFState(NamedTuple): 
-    Xe: FloatScalar
+    Xned: FloatScalar
     Vb: FloatScalar 
     Euler: FloatScalar
     pqr: FloatScalar
-    Ve: FloatScalar
+    Vned: FloatScalar
 
 
 class SixDOFDynamics:
@@ -117,11 +117,11 @@ class SixDOFDynamics:
             dict: A dictionary containing time and state history.
         """
         initial_state_vector = jnp.concatenate([
-            initial_state.Xe,
+            initial_state.Xned,
             initial_state.Vb, 
             initial_state.Euler,
             initial_state.pqr, 
-            initial_state.Ve  # Add zeros for vned, dotpqr and ab
+            initial_state.Vned  # Add zeros for vned, dotpqr and ab
         ])
         forces = jnp.asarray(forces)
         moments = jnp.asarray(moments)
@@ -166,11 +166,11 @@ class SixDOFDynamics:
             states = jnp.array(sol.ys)
          
         nxt_state = SixDOFState(
-            Xe=states[-1, :3],
+            Xned=states[-1, :3],
             Vb=states[-1, 3:6],
             Euler=states[-1, 6:9],
             pqr=states[-1, 9:12],
-            Ve=states[-1, 12:15]
+            Vned=states[-1, 12:15]
         )
         return nxt_state, {"time": times, "states": states} # Return time and state history
 
@@ -182,8 +182,8 @@ if __name__ == "__main__":
     moments = [0., 0., 0.]  # No initial moments
     
     initial_state = SixDOFState(
-        Ve=np.array([0., 0., 0.]),
-        Xe=np.array([0., 0., 0.]),
+        Vned=np.array([0., 0., 0.]),
+        Xned=np.array([0., 0., 0.]),
         Vb=np.array([30., 0., 0.]),
         Euler=np.array([0., 0., 0.]),
         pqr=np.array([0., 0., 0.]) 

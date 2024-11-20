@@ -2,7 +2,7 @@ import gym
 import numpy as np
 import jax.numpy as jnp
 
-
+from typing import Optional
 from jax_mavrik.mavrik import Mavrik
 import jax
 import optax
@@ -32,30 +32,30 @@ class MavrikEnv(gym.Env):
             
         return next_state, reward, done, info
 
-    def reset(self):
-        U = 30  # trim speed
-        eulerIn = [0,0.069813,0]  #[0, 4 * np.pi / 180, 0]  # trim attitude (roll, pitch, yaw)
-        vnedIn = [30., 0., 0.] #np.array([U * np.cos(eulerIn[1]), U * np.sin(eulerIn[1]), 0])  # NED velocity
-        # Convert NED velocity to body frame velocity
-    
+    def reset(self, U: float = 30.0, euler: np.ndarray = np.array([0, 0.0698, 0]), xned: np.array = np.array([0, 0, 0]), target_xned: Optional[np.array] = None):
+        vned = np.array([U, 0, 0])
+        vb = self.mavrik.ned2xyz(euler, vned)
         self.state = np.array([
-            *vnedIn,  # u, v, w
-            0.0, 0.0, 0.0,   # X, Y, Z
-            *eulerIn,   # roll, pitch, yaw
-            0.0, 0.0, 0.0,   # Vbx, Vby, Vbz
+            *vned,  # VXe, VYe, VZe
+            *xned,   # Xe Ye Ze
+            *vb,   # u v w
+            *euler,   # roll, pitch, yaw 
             0.0, 0.0, 0.0,   # wx, wy, wz
             0.0, 0.0, 0.0,   # dwdt_x, dwdt_y, dwdt_z
             0.0, 0.0, 0.0,   # ax, ay, az
             0.0, 0.0, 0.0,   # Fx, Fy, Fz
             0.0, 0.0, 0.0    # L, M, N
         ])
+        if target_xned is not None:
+            self.target_position = target_xned
+            
         return self.state
 
     def render(self, mode='human'):
         self.mavrik.render(mode)
 
     def _compute_reward(self, state):
-        position = state[3:6]  # Assuming the first three elements of the state are the position
+        position = state[self.mavrik.STATE.Xe:self.mavrik.STATE.Xe+3]  # Assuming the first three elements of the state are the position
         distance = np.linalg.norm(position - self.target_position)
         reward = np.exp(-distance)  # The closer to the target, the greater the reward (less negative)
         return reward
@@ -66,9 +66,9 @@ class MavrikEnv(gym.Env):
             print("Encountered NaN in state, ending episode.")
             return -1
             
-        position = state[3:6]
+        position = state[self.mavrik.STATE.Xe:self.mavrik.STATE.Xe+3]
         distance = np.linalg.norm(position - self.target_position)
-        velocity = state[:3]
+        velocity = state[self.mavrik.STATE.VXe:self.mavrik.STATE.VXe+3]
         speed =  np.linalg.norm(velocity)
         return int(distance < 5.0 and speed < 5.0) # Consider done if within 5 unit of the target while speed below 5 units
          
