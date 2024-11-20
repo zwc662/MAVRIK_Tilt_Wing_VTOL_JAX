@@ -19,23 +19,6 @@ pip install -e .
 ## Quickstart
 ```python
     from jax_marik.mavrik import Mavrik
-    U = 30  # trim speed
-    eulerIn = [0,0.069813,0]  # trim attitude (roll, pitch, yaw)
-    vnedIn = [30., 0., 0.]  # NED velocity
-    # Convert NED velocity to body frame velocity
-   
-    state = np.array([
-        *vnedIn,  # u, v, w
-        0.0, 0.0, 0.0,   # X, Y, Z
-        *eulerIn,   # roll, pitch, yaw
-        0.0, 0.0, 0.0,   # Vbx, Vby, Vbz
-        0.0, 0.0, 0.0,   # wx, wy, wz
-        0.0, 0.0, 0.0,   # dwdt_x, dwdt_y, dwdt_z
-        0.0, 0.0, 0.0,   # ax, ay, az
-        0.0, 0.0, 0.0,   # Fx, Fy, Fz
-        0.0, 0.0, 0.0    # L, M, N
-    ])
-
     control = np.array([
         0.0, 0.0, 0.0,  # wing_tilt, tail_tilt, aileron
         0.0, 0.0, 0.0,  # elevator, flap, rudder
@@ -47,9 +30,19 @@ pip install -e .
         7500.0, 7500.0,  # RPM_right9, RPM_right10
         7500.0, 7500.0   # RPM_right11, RPM_right12Out
     ])
-
+   
+    state = np.array([
+        0.0000, 0.0000, 0.0000,  # VXe, VYe, VZe
+        30.0000, 0, 0,  # Xe Ye Ze
+        29.9269, 0, 2.0927, # u v w
+        0, 0.0698, 0,   # roll, pitch, yaw 
+        0.0, 0.0, 0.0,   # p, q, r
+        0.0, 0.0, 0.0,   # Fx, Fy, Fz
+        0.0, 0.0, 0.0    # L, M, N
+    ])
+ 
     mavrik = Mavrik()
-    
+
     num_steps = int(0.1 / 0.01)
     states = [state]
     tot_runtime = 0.0
@@ -60,7 +53,8 @@ pip install -e .
         runtime = end_time - start_time
         tot_runtime += runtime
         states.append(state)
-        print(f"[Iteration {i}] Runtime: {runtime:.6f} | Tot: {tot_runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds | State.: {info['state']}")
+        print(f">>>>>>>>>>>>>>>>>>>> Iteration: {i} <<<<<<<<<<<<<<<<<<<<<<")
+        print(f"Runtime: {runtime:.6f} | Tot: {tot_runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds | State: {state}")
     
 ```
  
@@ -70,12 +64,12 @@ This project is based on the Mavrik Tilt Wing model from [BechamoNasaModels](htt
 ## Citations
 If you use this code in your research, please cite:
 ```bibtex
-@misc{zhou2023jax,
+@misc{zhou2024jaxmavrik,
     author = {Weichao Zhou},
     title = {Jax Mavrik Tilt-wing Vehicle Dynamics},
     year = {2024},
     publisher = {GitHub},
     journal = {GitHub repository},
-    howpublished = {\url{https://github.com/zwc662/mavrik_jax}},
+    howpublished = {\url{https://github.com/zwc662/MAVRIK_Tilt_Wing_VTOL_JAX}},
 }
 ```

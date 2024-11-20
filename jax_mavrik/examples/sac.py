@@ -32,7 +32,12 @@ class MavrikEnv(gym.Env):
             
         return next_state, reward, done, info
 
-    def reset(self, U: float = 30.0, euler: np.ndarray = np.array([0, 0.0698, 0]), xned: np.array = np.array([0, 0, 0]), target_xned: Optional[np.array] = None):
+    def reset(self, 
+              U: float = 30.0, 
+              euler: np.ndarray = np.array([0, 0.0698, 0]), 
+              xned: np.array = np.array([0, 0, 0]), 
+              pqr: np.array = np.array([0, 0.0698, 0]),
+              target_xned: Optional[np.array] = None):
         vned = np.array([U, 0, 0])
         vb = self.mavrik.ned2xyz(euler, vned)
         self.state = np.array([
@@ -40,7 +45,7 @@ class MavrikEnv(gym.Env):
             *xned,   # Xe Ye Ze
             *vb,   # u v w
             *euler,   # roll, pitch, yaw 
-            0.0, 0.0, 0.0,   # wx, wy, wz 
+            0, 0.0698, 0,   # wx, wy, wz 
             0.0, 0.0, 0.0,   # Fx, Fy, Fz
             0.0, 0.0, 0.0    # L, M, N
         ])
