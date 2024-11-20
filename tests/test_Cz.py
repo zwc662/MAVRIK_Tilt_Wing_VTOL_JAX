@@ -256,7 +256,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     CZ_hover_fuse = mavrik_aero.CZ_hover_fuse_lookup_table(jnp.array([
         u.U, u.alpha, u.beta
     ]))
-    CZ_hover_fuse_padded = jnp.array([0.0, 0.0, CZ_hover_fuse])
+    CZ_hover_fuse_padded = jnp.array([0.0, 0.0, CZ_hover_fuse * CZ_Scale])
     
     F3_array = jnp.array([
             CZ_aileron_wing_padded_transformed[0] + CZ_elevator_tail_padded_transformed[0] + CZ_flap_wing_padded_transformed[0] + CZ_rudder_tail_padded_transformed[0] +

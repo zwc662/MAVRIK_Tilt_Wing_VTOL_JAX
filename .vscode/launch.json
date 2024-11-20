@@ -6,12 +6,12 @@
     "configurations": [
       
         {
-            "name": "Pytest: test_Cm",
+            "name": "Pytest: test_Cn",
             "type": "python",
             "request": "launch",
             "module": "pytest",
             "cwd": "${workspaceFolder}/tests/",
-            "args": ["${workspaceFolder}/tests/test_Cm.py", "-s"],
+            "args": ["${workspaceFolder}/tests/test_Cn.py", "-s"],
             "python": "/home/zhouw534/anaconda3/envs/mavrik/bin/python",
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.vscode/project.env",

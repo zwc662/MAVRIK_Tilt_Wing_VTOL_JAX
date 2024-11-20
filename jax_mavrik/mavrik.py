@@ -19,7 +19,7 @@ class Mavrik:
     def __init__(self, mavrik_setup: Optional[MavrikSetup] = None, dt: float = 0.01, method: str = 'RK4', fixed_step_size: float = 0.01):
         mavrik_setup = mavrik_setup if mavrik_setup is not None else _MAVRIK_SETUP_
         self.simulator = Simulator(mavrik_setup=mavrik_setup, method = method, fixed_step_size=fixed_step_size)
-        self.state_ndim = 21 
+        self.state_ndim = 21
         self.control_ndim = 20
         self.control = None 
         self.dt = dt
@@ -27,13 +27,12 @@ class Mavrik:
     def step(self, state: StateArr, control: ControlArr): # -> jnp.ndarray:
         if state is None or control is None:
             raise ValueError("State and control must be initialized using reset() before calling step().")
-        assert control.shape == (self.control_ndim,)
-        assert state.shape == (self.state_ndim,)
+        assert control.shape == (self.control_ndim,), f"Control shape mismatch. Expected: {self.control_ndim}, Got: {control.shape}"
+        assert state.shape == (self.state_ndim,), f"State shape mismatch. Expected: {self.state_ndim}, Got: {state.shape}"
         cur_state = StateVariables(*state)
         control_input = ControlInputs(*control)
-        nxt_state = self.simulator.run(cur_state, control_input, self.dt)
-
-        info = {'state': cur_state, 'control': control_input, 'nxt_state': nxt_state}
+        nxt_state, info= self.simulator.run(cur_state, control_input, self.dt)
+        info['control'] = control_input
         return np.asarray(list(nxt_state._asdict().values())), info
      
 # Example usage

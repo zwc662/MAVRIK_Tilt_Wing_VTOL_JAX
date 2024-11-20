@@ -57,18 +57,18 @@ class StateVariables(NamedTuple):
     p: Float  # Angular velocity in x direction
     q: Float  # Angular velocity in y direction
     r: Float  # Angular velocity in z direction
-    pdot: Float  # Angular acceleration in x direction
-    qdot: Float  # Angular acceleration in y direction
-    rdot: Float  # Angular acceleration in z direction
-    udot: Float  # Linear acceleration in x direction
-    vdot: Float  # Linear acceleration in y direction
-    wdot: Float  # Linear acceleration in z direction
-    #Fx: Float  # Force in x direction
-    #Fy: Float  # Force in y direction
-    #Fz: Float  # Force in z direction
-    #L: Float  # Moment about x-axis
-    #M: Float  # Moment about y-axis
-    #N: Float  # Moment about z-axis
+    #pdot: Float  # Angular acceleration in x direction
+    #qdot: Float  # Angular acceleration in y direction
+    #rdot: Float  # Angular acceleration in z direction
+    #udot: Float  # Linear acceleration in x direction
+    #vdot: Float  # Linear acceleration in y direction
+    #wdot: Float  # Linear acceleration in z direction
+    Fx: Float  # Force in x direction
+    Fy: Float  # Force in y direction
+    Fz: Float  # Force in z direction
+    L: Float  # Moment about x-axis
+    M: Float  # Moment about y-axis
+    N: Float  # Moment about z-axis
 
 
 class AeroState(NamedTuple):

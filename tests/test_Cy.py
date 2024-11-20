@@ -238,7 +238,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     CY_hover_fuse = mavrik_aero.CY_hover_fuse_lookup_table(jnp.array([
         u.U, u.alpha, u.beta
     ]))
-    CY_hover_fuse_padded = jnp.array([0.0, CY_hover_fuse, 0.0])
+    CY_hover_fuse_padded = jnp.array([0.0, CY_hover_fuse * CY_Scale, 0.0])
      
     CY_aileron_wing_close = jnp.allclose(CY_aileron_wing, expected_CY_alieron_wing_values, atol=0.001)
     print("CY_aileron_wing_close???", CY_aileron_wing_close)

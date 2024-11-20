@@ -1,6 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
-from typing import NamedTuple, Optional
+from typing import NamedTuple, Optional, Tuple, Dict
 from jaxtyping import Float
 
 from jax_mavrik.src.utils.jax_types import FloatScalar
@@ -9,6 +9,7 @@ import diffrax
 from jax import numpy as jnp
 from jax import jit
 from jax import lax
+from jax import vmap
 
 
 class RigidBody(NamedTuple):
@@ -16,13 +17,11 @@ class RigidBody(NamedTuple):
     inertia: Float
 
 class SixDOFState(NamedTuple): 
-    Ve: FloatScalar
     Xe: FloatScalar
     Vb: FloatScalar 
     Euler: FloatScalar
     pqr: FloatScalar
-    ab: FloatScalar
-    dotpqr: FloatScalar
+    Ve: FloatScalar
 
 
 class SixDOFDynamics:
@@ -49,7 +48,7 @@ class SixDOFDynamics:
         Defines the 6DOF dynamics equations of motion based on Newton's and Euler's equations.
         
         Args:
-            state (numpy.ndarray): Current state vector [u, v, w, phi, theta, psi, p, q, r].
+            state (numpy.ndarray): Current state vector [..., u, v, w, phi, theta, psi, p, q, r, ...].
             Fxyz (array-like): Forces acting on the rigid body (Fx, Fy, Fz).
             Mxyz (array-like): Moments acting on the rigid body (Mx, My, Mz).
         
@@ -61,21 +60,22 @@ class SixDOFDynamics:
         if isinstance(state, jnp.ndarray):
             array, cos, sin, tan, concatenate, linalg, cross = jnp.asarray, jnp.cos, jnp.sin, jnp.tan, jnp.concatenate, jnp.linalg, jnp.cross
           
-        _, _, _, _, _, _, u, v, w, phi, theta, psi, p, q, r, _, _, _, _, _, _ = state
+        _, _, _, u, v, w, phi, theta, psi, p, q, r, _, _, _ = state
 
         # Convert body-frame forces (Fxyz) to NED-frame forces
         L_EB = array(euler_to_dcm(phi, theta, psi)).T  # Transpose to convert body to NED
 
         # Position derivatives in the NED frame (convert body velocities to NED frame)
-        dXe, dYe, dZe = L_EB @ array([u, v, w])
+        
         
         # Translational acceleration in the body frame
         du = Fxyz[0] / self.rigid_body.mass + r * v - q * w
         dv = Fxyz[1] / self.rigid_body.mass + p * w - r * u
         dw = Fxyz[2] / self.rigid_body.mass + q * u - p * v
 
+        dXe, dYe, dZe = L_EB @ array([u, v, w]) 
         dVXe, dVYe, dVZe = L_EB @ array([du, dv, dw]) 
-      
+
         # Rotational motion (Euler's equations in the body frame)
         angular_velocity = array([p, q, r])
         I = self.rigid_body.inertia
@@ -90,11 +90,17 @@ class SixDOFDynamics:
         dpsi = (q * sin(phi) + r * cos(phi)) / (cos(theta) + epsilon)
          
         # Return the state offsets
-        return concatenate([array([dVXe, dVYe, dVZe]), array([dXe, dYe, dZe]), array([du, dv, dw]), array([dphi, dtheta, dpsi]), array([dp, dq, dr]), array([du, dv, dw]), array([dp, dq, dr])])
-    
+        return concatenate([
+            array([dXe, dYe, dZe]),  ## Update xe from state[:3]
+            array([du, dv, dw]),  ## Update vb from state[3:6]
+            array([dphi, dtheta, dpsi]),  ## Update euler from state[6:9]
+            array([dp, dq, dr]), ## Update pqr from state[9:12]
+            array([dVXe, dVYe, dVZe]),  ## Update vned at state[12:15] 
+            ])
+                                      
     
  
-    def run_simulation(self, initial_state: SixDOFState, forces: FloatScalar, moments: FloatScalar, t0=0.0, t1=0.01):
+    def run_simulation(self, initial_state: SixDOFState, forces: FloatScalar, moments: FloatScalar, t=0.01) -> Tuple[SixDOFState, Dict[str, jnp.ndarray]]:
         """
         Run the 6DOF dynamics simulation.
         
@@ -111,21 +117,19 @@ class SixDOFDynamics:
             dict: A dictionary containing time and state history.
         """
         initial_state_vector = jnp.concatenate([
-            initial_state.Ve,
             initial_state.Xe,
             initial_state.Vb, 
             initial_state.Euler,
-            initial_state.pqr,
-            jnp.zeros(6)  # Add zeros for dotpqr and ab
+            initial_state.pqr, 
+            initial_state.Ve  # Add zeros for vned, dotpqr and ab
         ])
         forces = jnp.asarray(forces)
         moments = jnp.asarray(moments)
 
-        num_points = jnp.ceil((t1 - t0) / self.fixed_step_size).astype(int)
-        times = jnp.linspace(t0, t1, num_points)
+        num_points = jnp.ceil(t / self.fixed_step_size).astype(int)
+        times = jnp.linspace(0, t, num_points)
         if self.method.lower() == "rk4":
             def rk4_step(state, forces_moments):
-                state = state.at[-6:].set(jnp.zeros(6))
                 forces, moments = forces_moments
                 forces, moments = jnp.asarray(forces), jnp.asarray(moments)
                 k1 = self.fixed_step_size * self._six_dof_dynamics(state, forces, moments)
@@ -140,7 +144,6 @@ class SixDOFDynamics:
 
         elif self.method.lower() == "euler":
             def euler_step(state, forces_moments):
-                state = state.at[-6:].set(jnp.zeros(6))
                 forces, moments = forces_moments
                 forces, moments = jnp.asarray(forces), jnp.asarray(moments)
                 new_state = state + self.fixed_step_size * self._six_dof_dynamics(state, forces, moments)
@@ -153,17 +156,23 @@ class SixDOFDynamics:
             ##### The first state output will remain the same as the initial state
             ##### Recommend using RK4 or Euler methods for now
             def dynamics(t, state, args):
-                state = state.at[-6:].set(jnp.zeros(6))
                 forces, moments = jnp.asarray(args[0]), jnp.asarray(args[1])
                 return jnp.array(self._six_dof_dynamics(state, forces, moments))
 
             solver = diffrax.Tsit5()
             term = diffrax.ODETerm(dynamics)
             saveat = diffrax.SaveAt(ts=times)
-            sol = diffrax.diffeqsolve(term, solver, t0=t0, t1=t1, dt0=self.fixed_step_size, y0=initial_state_vector, args=(forces, moments), saveat=saveat)
+            sol = diffrax.diffeqsolve(term, solver, t0=0, t1=t, dt0=self.fixed_step_size, y0=initial_state_vector, args=(forces, moments), saveat=saveat)
             states = jnp.array(sol.ys)
-
-        return {"time": times, "states": states} # Return time and state history
+         
+        nxt_state = SixDOFState(
+            Xe=states[-1, :3],
+            Vb=states[-1, 3:6],
+            Euler=states[-1, 6:9],
+            pqr=states[-1, 9:12],
+            Ve=states[-1, 12:15]
+        )
+        return nxt_state, {"time": times, "states": states} # Return time and state history
 
 if __name__ == "__main__":
     # Define constants and initial state
@@ -171,15 +180,13 @@ if __name__ == "__main__":
     inertia = np.diag([0.5, 0.5, 0.8])
     forces = [0., 0., -mass * 9.81]  # Gravity in the body frame
     moments = [0., 0., 0.]  # No initial moments
-    t0, t1 = 0.0, 30.0
+    
     initial_state = SixDOFState(
         Ve=np.array([0., 0., 0.]),
         Xe=np.array([0., 0., 0.]),
         Vb=np.array([30., 0., 0.]),
         Euler=np.array([0., 0., 0.]),
-        pqr=np.array([0., 0., 0.]),
-        ab=np.array([0., 0., 0.]),
-        dotpqr=np.array([0., 0., 0.])
+        pqr=np.array([0., 0., 0.]) 
     )
 
     rigid_body = RigidBody(mass=mass, inertia=np.array(inertia))
@@ -188,7 +195,7 @@ if __name__ == "__main__":
     
     ## Testing RK4 method
     dynamics = SixDOFDynamics(rigid_body, method="RK4", fixed_step_size=0.01)
-    results_rk4 = dynamics.run_simulation(initial_state, forces, moments, t0, t1)
+    results_rk4 = dynamics.run_simulation(initial_state, forces, moments, t1)
     # Plot results for RK4 method (position over time as an example)
     time_rk4 = results_rk4["time"]
     position_rk4 = results_rk4["states"][:, 3:6]  # x, y, z positions
@@ -198,7 +205,7 @@ if __name__ == "__main__":
 
     ## Testing Euler method
     dynamics = SixDOFDynamics(rigid_body, method="euler", fixed_step_size=0.01)
-    results_euler = dynamics.run_simulation(initial_state, forces, moments, t0, t1)
+    results_euler = dynamics.run_simulation(initial_state, forces, moments, t1)
     time_euler = results_euler["time"]
     position_euler = results_euler["states"][:, 3:6]  # x, y, z positions
     plt.plot(time_euler, position_euler[:, 0], label="X Position (Euler)")
@@ -207,7 +214,7 @@ if __name__ == "__main__":
 
     ## Testing diffrax method
     dynamics = SixDOFDynamics(rigid_body, method="diffrax", fixed_step_size=0.01)
-    results_diffrax = dynamics.run_simulation(initial_state, forces, moments, t0, t1)
+    results_diffrax = dynamics.run_simulation(initial_state, forces, moments, t1)
     time_diffrax = results_diffrax["time"]
     position_diffrax = results_diffrax["states"][:, 3:6]  # x, y, z positions
     plt.plot(time_diffrax, position_diffrax[:, 0], label="X Position (diffrax)")

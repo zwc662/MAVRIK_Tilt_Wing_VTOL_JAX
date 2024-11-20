@@ -514,7 +514,7 @@ class MavrikAero:
         CY_hover_fuse = self.CY_hover_fuse_lookup_table(jnp.array([
             u.U, u.alpha, u.beta
         ]))
-        CY_hover_fuse_padded = jnp.array([0.0, CY_hover_fuse, 0.0])
+        CY_hover_fuse_padded = jnp.array([0.0, CY_hover_fuse * CY_Scale, 0.0])
 
         return Forces(
             CY_aileron_wing_padded_transformed[0] + CY_elevator_tail_padded_transformed[0] + CY_flap_wing_padded_transformed[0] + CY_rudder_tail_padded_transformed[0] +
@@ -694,7 +694,7 @@ class MavrikAero:
         CZ_hover_fuse = self.CZ_hover_fuse_lookup_table(jnp.array([
             u.U, u.alpha, u.beta
         ]))
-        CZ_hover_fuse_padded = jnp.array([0.0, 0.0, CZ_hover_fuse])
+        CZ_hover_fuse_padded = jnp.array([0.0, 0.0, CZ_hover_fuse * CZ_Scale])
 
         return Forces(
             CZ_aileron_wing_padded_transformed[0] + CZ_elevator_tail_padded_transformed[0] + CZ_flap_wing_padded_transformed[0] + CZ_rudder_tail_padded_transformed[0] +
@@ -860,7 +860,7 @@ class MavrikAero:
         Cl_hover_fuse = self.Cl_hover_fuse_lookup_table(jnp.array([
             u.U, u.alpha, u.beta
         ]))
-        Cl_hover_fuse_padded = jnp.array([Cl_hover_fuse, 0.0, 0.0])
+        Cl_hover_fuse_padded = jnp.array([Cl_hover_fuse * Cl_Scale, 0.0, 0.0])
 
         return Moments(
             Cl_aileron_wing_padded_transformed[0] + Cl_elevator_tail_padded_transformed[0] + Cl_flap_wing_padded_transformed[0] + Cl_rudder_tail_padded_transformed[0] +
@@ -1029,7 +1029,7 @@ class MavrikAero:
         Cm_hover_fuse = self.Cm_hover_fuse_lookup_table(jnp.array([
             u.U, u.alpha, u.beta
         ]))
-        Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse, 0.0])
+        Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse * Cm_Scale, 0.0])
           
 
         return Moments(
@@ -1064,6 +1064,7 @@ class MavrikAero:
         Cn_rudder_tail_breakpoints = [getattr(mavrik_setup, f'Cn_rudder_tail_{i}') for i in range(1, 1 + 7)]
         Cn_rudder_tail_value = mavrik_setup.Cn_rudder_tail_val
         self.Cn_rudder_tail_lookup_table = JaxNDInterpolator(Cn_rudder_tail_breakpoints, Cn_rudder_tail_value)
+        
         Cn_tail_breakpoints = [getattr(mavrik_setup, f'Cn_tail_{i}') for i in range(1, 1 + 6)]
         Cn_tail_value = mavrik_setup.Cn_tail_val
         self.Cn_tail_lookup_table = JaxNDInterpolator(Cn_tail_breakpoints, Cn_tail_value)
@@ -1193,8 +1194,7 @@ class MavrikAero:
         Cn_hover_fuse = self.Cn_hover_fuse_lookup_table(jnp.array([
             u.U, u.alpha, u.beta
         ]))
-        Cn_hover_fuse_padded = jnp.array([0.0, 0.0, Cn_hover_fuse])
-        Cn_hover_fuse_padded = jnp.array([0.0, 0.0, Cn_hover_fuse])
+        Cn_hover_fuse_padded = jnp.array([0.0, 0.0, Cn_hover_fuse * Cn_Scale]) 
 
         return Moments(
             Cn_aileron_wing_padded_transformed[0] + Cn_elevator_tail_padded_transformed[0] + Cn_flap_wing_padded_transformed[0] + Cn_rudder_tail_padded_transformed[0] +

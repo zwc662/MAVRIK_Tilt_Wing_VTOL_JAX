@@ -34,26 +34,32 @@ class Simulator:
         sixdof_forces = jnp.array([forces.Fx, forces.Fy, forces.Fz])
         sixdof_moments = jnp.array([moments.L, moments.M, moments.N])
         # Compute the state derivatives using 6DOF dynamics
-        nxt_sixdof_state = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, 0, dt)["states"][-1]
+        nxt_sixdof_state, info = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, dt) 
         
         nxt_state = state._replace(
-            VXe = nxt_sixdof_state[0],
-            VYe = nxt_sixdof_state[1],
-            VZe = nxt_sixdof_state[2],
-            Xe = nxt_sixdof_state[3],
-            Ye = nxt_sixdof_state[4],
-            Ze = nxt_sixdof_state[5],
-            u = nxt_sixdof_state[6],
-            v = nxt_sixdof_state[7],
-            w = nxt_sixdof_state[8],
-            roll = nxt_sixdof_state[9],
-            pitch = nxt_sixdof_state[10],
-            yaw = nxt_sixdof_state[11],
-            p = nxt_sixdof_state[12],
-            q = nxt_sixdof_state[13],
-            r = nxt_sixdof_state[14]
+            VXe = nxt_sixdof_state.Ve[0],
+            VYe = nxt_sixdof_state.Ve[1],
+            VZe = nxt_sixdof_state.Ve[2],
+            Xe = nxt_sixdof_state.Xe[0],
+            Ye = nxt_sixdof_state.Xe[1],
+            Ze = nxt_sixdof_state.Xe[2],
+            u = nxt_sixdof_state.Vb[0],
+            v = nxt_sixdof_state.Vb[1],
+            w = nxt_sixdof_state.Vb[2],
+            roll = nxt_sixdof_state.Euler[0],
+            pitch = nxt_sixdof_state.Euler[1],
+            yaw = nxt_sixdof_state.Euler[2],
+            p = nxt_sixdof_state.pqr[0],
+            q = nxt_sixdof_state.pqr[1],
+            r = nxt_sixdof_state.pqr[2],
+            Fx = forces.Fx,
+            Fy = forces.Fy,
+            Fz = forces.Fz,
+            L = moments.L,
+            M = moments.M,
+            N = moments.N
         )
-        return nxt_state
+        return nxt_state, info
 
 if __name__ == "__main__":
     # Initialize MavrikSetup with appropriate values

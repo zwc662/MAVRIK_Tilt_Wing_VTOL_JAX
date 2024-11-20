@@ -230,58 +230,58 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
     Kq_array = jnp.array([M5.L, M5.M, M5.N])
     
 
-    Ct_close = jnp.allclose(Ct_array, expected_Ct_outputs_values, atol=0.1)
+    Ct_close = jnp.allclose(Ct_array, expected_Ct_outputs_values, atol=0.0001)
     print("Ct Outputs close???", Ct_close)
     if not Ct_close:
         print(f"\n  Expected: {expected_Ct_outputs_values}\n  Got: {Ct_array}")
         max_diff_index_Ct = jnp.argmax(jnp.abs(Ct_array - expected_Ct_outputs_values))
         print(f"\n  Max difference in Ct at index {max_diff_index_Ct}: Expected {expected_Ct_outputs_values[max_diff_index_Ct]}, Got {Ct_array[max_diff_index_Ct]}")
 
-    Cn_close = jnp.allclose(Cn_array, expected_Cn_outputs_values, atol=0.1)
+    Cn_close = jnp.allclose(Cn_array, expected_Cn_outputs_values, atol=0.0001)
     print("Cn Outputs close???", Cn_close)
     if not Cn_close:
         print(f"\n  Expected: {expected_Cn_outputs_values}\n  Got: {Cn_array}")
         max_diff_index_Cn = jnp.argmax(jnp.abs(Cn_array - expected_Cn_outputs_values))
         print(f"\n  Max difference in Cn at index {max_diff_index_Cn}: Expected {expected_Cn_outputs_values[max_diff_index_Cn]}, Got {Cn_array[max_diff_index_Cn]}")
 
-    Cx_close = jnp.allclose(Cx_array, expected_Cx_outputs_values, atol=0.1)
+    Cx_close = jnp.allclose(Cx_array, expected_Cx_outputs_values, atol=0.0001)
     print("Cx Outputs close???", Cx_close)
     if not Cx_close:
         print(f"\n  Expected: {expected_Cx_outputs_values}\n  Got: {Cx_array}")
         max_diff_index_Cx = jnp.argmax(jnp.abs(Cx_array - expected_Cx_outputs_values))
         print(f"\n  Max difference in Cx at index {max_diff_index_Cx}: Expected {expected_Cx_outputs_values[max_diff_index_Cx]}, Got {Cx_array[max_diff_index_Cx]}")
 
-    Cy_close = jnp.allclose(Cy_array, expected_Cy_outputs_values, atol=0.1)
+    Cy_close = jnp.allclose(Cy_array, expected_Cy_outputs_values, atol=0.0001)
     print("Cy Outputs close???", Cy_close)
     if not Cy_close:
         print(f"\n ActuatorOuputs As Expected??? {(actuator_outputs_array==expected_actuator_outputs_values)}")
-        print(f"{jnp.allclose(actuator_outputs_array, expected_actuator_outputs_values, atol=0.01)}")
+        print(f"{jnp.allclose(actuator_outputs_array, expected_actuator_outputs_values, atol=0.0001)}")
         print(f"\n  Expected: {expected_Cy_outputs_values}\n  Got: {Cy_array}")
         max_diff_index_Cy = jnp.argmax(jnp.abs(Cy_array - expected_Cy_outputs_values))
         print(f"\n  Max difference in Cy at index {max_diff_index_Cy}: Expected {expected_Cy_outputs_values[max_diff_index_Cy]}, Got {Cy_array[max_diff_index_Cy]}")
 
-    Cz_close = jnp.allclose(Cz_array, expected_Cz_outputs_values, atol=0.1)
+    Cz_close = jnp.allclose(Cz_array, expected_Cz_outputs_values, atol=0.0001)
     print("Cz Outputs close???", Cz_close)
     if not Cz_close:
         print(f"\n  Expected: {expected_Cz_outputs_values}\n  Got: {Cz_array}")
         max_diff_index_Cz = jnp.argmax(jnp.abs(Cz_array - expected_Cz_outputs_values))
         print(f"\n  Max difference in Cz at index {max_diff_index_Cz}: Expected {expected_Cz_outputs_values[max_diff_index_Cz]}, Got {Cz_array[max_diff_index_Cz]}")
 
-    Cl_close = jnp.allclose(Cl_array, expected_Cl_outputs_values, atol=0.1)
+    Cl_close = jnp.allclose(Cl_array, expected_Cl_outputs_values, atol=0.0001)
     print("Cl Outputs close???", Cl_close)
     if not Cl_close:
         print(f"\n  Expected: {expected_Cl_outputs_values}\n  Got: {Cl_array}")
         max_diff_index_Cl = jnp.argmax(jnp.abs(Cl_array - expected_Cl_outputs_values))
         print(f"\n  Max difference in Cl at index {max_diff_index_Cl}: Expected {expected_Cl_outputs_values[max_diff_index_Cl]}, Got {Cl_array[max_diff_index_Cl]}")
 
-    Cm_close = jnp.allclose(Cm_array, expected_Cm_outputs_values, atol=0.1)
+    Cm_close = jnp.allclose(Cm_array, expected_Cm_outputs_values, atol=0.0001)
     print("Cm Outputs close???", Cm_close)
     if not Cm_close:
         print(f"\n  Expected: {expected_Cm_outputs_values}\n  Got: {Cm_array}")
         max_diff_index_Cm = jnp.argmax(jnp.abs(Cm_array - expected_Cm_outputs_values))
         print(f"\n  Max difference in Cm at index {max_diff_index_Cm}: Expected {expected_Cm_outputs_values[max_diff_index_Cm]}, Got {Cm_array[max_diff_index_Cm]}")
 
-    Kq_close = jnp.allclose(Kq_array, expected_Kq_outputs_values, atol=0.1)
+    Kq_close = jnp.allclose(Kq_array, expected_Kq_outputs_values, atol=0.0001)
     print("Kq Outputs close???", Kq_close)
     if not Kq_close:
         print(f"\n  Expected: {expected_Kq_outputs_values}\n  Got: {Kq_array}")
@@ -291,14 +291,14 @@ def test_mavrik_aero(id, mavrik_aero, control_inputs, vned, xned, euler, vb, pqr
     forces_array = jnp.array([forces.Fx, forces.Fy, forces.Fz])
     moments_array = jnp.array([moments.L, moments.M, moments.N])
 
-    forces_close = jnp.allclose(forces_array, expected_forces, atol=0.1)
+    forces_close = jnp.allclose(forces_array, expected_forces, atol=0.0001)
     print("Forces close???", forces_close)
     if not forces_close:
         print( f"\n  Expected: {expected_forces}\n  Got: {forces_array}")
         max_diff_index_forces = jnp.argmax(jnp.abs(forces_array - expected_forces))
         print(f"\n  Max difference in forces at index {max_diff_index_forces}: Expected {expected_forces[max_diff_index_forces]}, Got {forces_array[max_diff_index_forces]}")
 
-    moments_close =  jnp.allclose(moments_array, expected_moments, atol=0.1)
+    moments_close =  jnp.allclose(moments_array, expected_moments, atol=0.0001)
     print("Moments close???", moments_close)
     if not moments_close:
         print(f"\n  Expected: {expected_moments}\n  Got: {moments_array}")
