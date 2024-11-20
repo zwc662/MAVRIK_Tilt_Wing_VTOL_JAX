@@ -40,9 +40,7 @@ class MavrikEnv(gym.Env):
             *xned,   # Xe Ye Ze
             *vb,   # u v w
             *euler,   # roll, pitch, yaw 
-            0.0, 0.0, 0.0,   # wx, wy, wz
-            0.0, 0.0, 0.0,   # dwdt_x, dwdt_y, dwdt_z
-            0.0, 0.0, 0.0,   # ax, ay, az
+            0.0, 0.0, 0.0,   # wx, wy, wz 
             0.0, 0.0, 0.0,   # Fx, Fy, Fz
             0.0, 0.0, 0.0    # L, M, N
         ])
