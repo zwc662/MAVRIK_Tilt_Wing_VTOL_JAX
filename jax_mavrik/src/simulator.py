@@ -14,9 +14,12 @@ from jax import jit
 from jax_mavrik.src.mavrik_aero import MavrikAero
 from jax_mavrik.mavrik_setup import MavrikSetup
 
+def wrap_to_pi(angle):
+    return (angle + jnp.pi) % (2 * jnp.pi) - jnp.pi
+
 class Simulator:
     def __init__(self, mavrik_setup: MavrikSetup, method: str = 'diffrax', fixed_step_size: float = 0.01):
-        rigid_body = RigidBody(mass=mavrik_setup.mass, inertia=mavrik_setup.inertia)
+        rigid_body = RigidBody(mass=mavrik_setup.mass, inertia=mavrik_setup.inertia, inverse_inertia=np.linalg.inv(mavrik_setup.inertia))
         self.sixdof_model = SixDOFDynamics(rigid_body, method, fixed_step_size) 
         self.aero_model = MavrikAero(mavrik_setup)
  
@@ -28,36 +31,39 @@ class Simulator:
             Vned=jnp.array([state.VXe, state.VYe, state.VZe]),
             Xned=jnp.array([state.Xe, state.Ye, state.Ze]),
             Vb=jnp.array([state.u, state.v, state.w]), 
-            Euler=jnp.array([state.roll, state.pitch, state.yaw]),
+            Euler=wrap_to_pi(jnp.array([state.roll, state.pitch, state.yaw])),
             pqr=jnp.array([state.p, state.q, state.r])
         )
+ 
         sixdof_forces = jnp.array([forces.Fx, forces.Fy, forces.Fz])
         sixdof_moments = jnp.array([moments.L, moments.M, moments.N])
         # Compute the state derivatives using 6DOF dynamics
         nxt_sixdof_state, info = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, dt) 
         
+        # Ensure angles are within [-np.pi, np.pi]
+        
         nxt_state = state._replace(
-            VXe = nxt_sixdof_state.Vned[0],
-            VYe = nxt_sixdof_state.Vned[1],
-            VZe = nxt_sixdof_state.Vned[2],
-            Xe = nxt_sixdof_state.Xned[0],
-            Ye = nxt_sixdof_state.Xned[1],
-            Ze = nxt_sixdof_state.Xned[2],
-            u = nxt_sixdof_state.Vb[0],
-            v = nxt_sixdof_state.Vb[1],
-            w = nxt_sixdof_state.Vb[2],
-            roll = nxt_sixdof_state.Euler[0],
-            pitch = nxt_sixdof_state.Euler[1],
-            yaw = nxt_sixdof_state.Euler[2],
-            p = nxt_sixdof_state.pqr[0],
-            q = nxt_sixdof_state.pqr[1],
-            r = nxt_sixdof_state.pqr[2],
-            Fx = forces.Fx,
-            Fy = forces.Fy,
-            Fz = forces.Fz,
-            L = moments.L,
-            M = moments.M,
-            N = moments.N
+            VXe=nxt_sixdof_state.Vned[0],
+            VYe=nxt_sixdof_state.Vned[1],
+            VZe=nxt_sixdof_state.Vned[2],
+            Xe=nxt_sixdof_state.Xned[0],
+            Ye=nxt_sixdof_state.Xned[1],
+            Ze=nxt_sixdof_state.Xned[2],
+            u=nxt_sixdof_state.Vb[0],
+            v=nxt_sixdof_state.Vb[1],
+            w=nxt_sixdof_state.Vb[2],
+            roll=wrap_to_pi(nxt_sixdof_state.Euler[0]),
+            pitch=wrap_to_pi(nxt_sixdof_state.Euler[1]),
+            yaw=wrap_to_pi(nxt_sixdof_state.Euler[2]),
+            p=nxt_sixdof_state.pqr[0],
+            q=nxt_sixdof_state.pqr[1],
+            r=nxt_sixdof_state.pqr[2],
+            Fx=forces.Fx,
+            Fy=forces.Fy,
+            Fz=forces.Fz,
+            L=moments.L,
+            M=moments.M,
+            N=moments.N
         )
         return nxt_state, info
 

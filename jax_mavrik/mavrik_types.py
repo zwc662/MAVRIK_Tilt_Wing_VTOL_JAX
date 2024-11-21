@@ -12,6 +12,28 @@ StateArr = Float[arr, "21"]
 ControlArr = Float[arr, "20"]
 
 
+class MAVRIK_CONTROL(IntEnum):
+    wing_tilt = 0
+    tail_tilt = 1
+    aileron = 2
+    elevator = 3
+    flap = 4
+    rudder = 5
+    RPM_tailLeft = 6
+    RPM_tailRight = 7
+    RPM_leftOut1 = 8
+    RPM_left2 = 9
+    RPM_left3 = 10
+    RPM_left4 = 11
+    RPM_left5 = 12
+    RPM_left6In = 13
+    RPM_right7In = 14
+    RPM_right8 = 15
+    RPM_right9 = 16
+    RPM_right10 = 17
+    RPM_right11 = 18
+    RPM_right12Out = 19
+    
   
 class ControlInputs(NamedTuple):
     wing_tilt: Float

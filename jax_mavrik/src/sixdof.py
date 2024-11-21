@@ -15,6 +15,7 @@ from jax import vmap
 class RigidBody(NamedTuple):
     mass: Float
     inertia: Float
+    inverse_inertia: Float
 
 class SixDOFState(NamedTuple): 
     Xned: FloatScalar
@@ -79,7 +80,7 @@ class SixDOFDynamics:
         # Rotational motion (Euler's equations in the body frame)
         angular_velocity = array([p, q, r])
         I = self.rigid_body.inertia
-        I_inv = linalg.inv(I)
+        I_inv = self.rigid_body.inverse_inertia
         Mxyz = array(Mxyz)
         dp, dq, dr = I_inv @ (Mxyz - cross(angular_velocity, I @ angular_velocity))
          
@@ -116,6 +117,7 @@ class SixDOFDynamics:
         Returns:
             dict: A dictionary containing time and state history.
         """
+        #print(f"Running simulation: initial_state = {initial_state}, forces = {forces}, moments = {moments}, t = {t}")
         initial_state_vector = jnp.concatenate([
             initial_state.Xned,
             initial_state.Vb, 
@@ -141,6 +143,15 @@ class SixDOFDynamics:
 
             forces_moments = (jnp.tile(forces, (num_points, 1)), jnp.tile(moments, (num_points, 1)))
             _, states = lax.scan(rk4_step, initial_state_vector, forces_moments)
+            '''
+            states = []
+            state = initial_state_vector
+            for i in range(num_points):
+                state, _ = rk4_step(state, (forces, moments))
+                states.append(state)
+                print(f"Step {i}: state = {state}")
+            states = jnp.array(states)
+            '''
 
         elif self.method.lower() == "euler":
             def euler_step(state, forces_moments):
@@ -189,7 +200,7 @@ if __name__ == "__main__":
         pqr=np.array([0., 0., 0.]) 
     )
 
-    rigid_body = RigidBody(mass=mass, inertia=np.array(inertia))
+    rigid_body = RigidBody(mass=mass, inertia=np.array(inertia), inverse_inertia=np.linalg.inv(inertia))
 
     plt.figure()
     

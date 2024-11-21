@@ -32,8 +32,8 @@ pip install -e .
     ])
    
     state = np.array([
-        0.0000, 0.0000, 0.0000,  # VXe, VYe, VZe
-        30.0000, 0, 0,  # Xe Ye Ze
+        30.0000, 0, 0,  # VXe, VYe, VZe
+        0.0000, 0.0000, 0.0000, # Xe Ye Ze
         29.9269, 0, 2.0927, # u v w
         0, 0.0698, 0,   # roll, pitch, yaw 
         0.0, 0.0, 0.0,   # p, q, r

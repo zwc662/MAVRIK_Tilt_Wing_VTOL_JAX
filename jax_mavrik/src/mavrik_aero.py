@@ -603,8 +603,8 @@ class MavrikAero:
         CZ_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
         CZ_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
             
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+        #wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
+        #tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
 
          
         CZ_aileron_wing = self.CZ_aileron_wing_lookup_table(jnp.array([

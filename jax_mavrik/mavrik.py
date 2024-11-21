@@ -2,7 +2,7 @@
 from jax_mavrik.src.simulator import Simulator
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.mavrik_types import ControlInputs, StateArr, ControlArr
-from jax_mavrik.mavrik_types import StateVariables, ControlInputs, MAVRIK_STATE
+from jax_mavrik.mavrik_types import StateVariables, ControlInputs, MAVRIK_STATE, MAVRIK_CONTROL
 from jax_mavrik.src.utils.mat_tools import euler_to_dcm
 
 import numpy as np 
@@ -27,6 +27,7 @@ class Mavrik:
         self.dt = dt
         self.ned2xyz = lambda euler, ned: euler_to_dcm(*euler) @ ned
         self.STATE = MAVRIK_STATE
+        self.CONTROL = MAVRIK_CONTROL
  
     def step(self, state: StateArr, control: ControlArr): # -> jnp.ndarray:
         if state is None or control is None:
@@ -96,9 +97,7 @@ if __name__ == "__main__":
         [-0.0032, 0.0208, 0.0002],
         [-0.0040, 0.0117, 0.0003]
     ])
-
-
-    
+ 
     
     control = np.array([
         0.0, 0.0, 0.0,  # wing_tilt, tail_tilt, aileron
@@ -113,8 +112,8 @@ if __name__ == "__main__":
     ])
    
     state = np.array([
-        0.0000, 0.0000, 0.0000,  # VXe, VYe, VZe
         30.0000, 0, 0,  # Xe Ye Ze
+        0.0000, 0.0000, 0.0000,  # VXe, VYe, VZe
         29.9269, 0, 2.0927, # u v w
         0, 0.0698, 0,   # roll, pitch, yaw 
         0.0, 0.0, 0.0,   # p, q, r

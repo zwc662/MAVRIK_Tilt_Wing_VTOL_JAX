@@ -16,7 +16,7 @@ def rigid_body():
     )
     mass = mavrik_setup.mass
     inertia = mavrik_setup.inertia
-    return RigidBody(mass=mass, inertia=inertia)
+    return RigidBody(mass=mass, inertia=inertia, inverse_inertia=jnp.linalg.inv(inertia))
 
 
 @pytest.mark.parametrize(
