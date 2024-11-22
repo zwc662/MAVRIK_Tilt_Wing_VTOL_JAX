@@ -96,17 +96,11 @@ class StateVariables(NamedTuple):
     roll: Float  # Roll angle
     pitch: Float  # Pitch angle
     yaw: Float  # Yaw angle
-    # DCM: np.ndarray  # Direction Cosine Matrix, np.array([[3x3]]) # If using xyz coordinate, there is no need for NED frame
-   
+    
     p: Float  # Angular velocity in x direction
     q: Float  # Angular velocity in y direction
     r: Float  # Angular velocity in z direction
-    #pdot: Float  # Angular acceleration in x direction
-    #qdot: Float  # Angular acceleration in y direction
-    #rdot: Float  # Angular acceleration in z direction
-    #udot: Float  # Linear acceleration in x direction
-    #vdot: Float  # Linear acceleration in y direction
-    #wdot: Float  # Linear acceleration in z direction
+   
     Fx: Float  # Force in x direction
     Fy: Float  # Force in y direction
     Fz: Float  # Force in z direction
@@ -114,6 +108,14 @@ class StateVariables(NamedTuple):
     M: Float  # Moment about y-axis
     N: Float  # Moment about z-axis
 
+    # DCM: np.ndarray  # Direction Cosine Matrix, np.array([[3x3]]) # If using xyz coordinate, there is no need for NED frame
+   
+    #pdot: Float  # Angular acceleration in x direction
+    #qdot: Float  # Angular acceleration in y direction
+    #rdot: Float  # Angular acceleration in z direction
+    #udot: Float  # Linear acceleration in x direction
+    #vdot: Float  # Linear acceleration in y direction
+    #wdot: Float  # Linear acceleration in z direction
 
 class AeroState(NamedTuple):
     VXe: Float

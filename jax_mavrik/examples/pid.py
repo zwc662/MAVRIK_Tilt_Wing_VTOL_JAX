@@ -13,6 +13,10 @@ import os
 import sys
 import pickle
 
+from jax_mavrik.examples.system_id import SystemID
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
 def get_timestamp():
     return datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
@@ -124,7 +128,7 @@ class MavrikPIDController:
         # Compute raw thrust values from PID controllers
         raw_thrust_x = self.pos_pid_x.compute(self.target_xned[0], xned[0])  # x_e (North)
         raw_thrust_y = self.pos_pid_y.compute(self.target_xned[1], xned[1])  # y_e (East)
-        raw_thrust_z = self.pos_pid_z.compute(-self.target_xned[2], xned[2])  # z_e (Down)
+        raw_thrust_z = self.pos_pid_z.compute(self.target_xned[2], xned[2])  # z_e (Down)
 
         # Normalize thrust values to [-1, 1]
         thrust_x = self.normalize_thrust(raw_thrust_x)
@@ -194,7 +198,9 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
         trajectory = {'state': [], 'control': []}
 
         for _ in range(max_steps):
-            if jnp.isnan(state).any():
+            if jnp.isnan(state).any() or \
+                state[pid_controller.mavrik.STATE.Ze] > 10 or \
+                    state[pid_controller.mavrik.STATE.Ze] < -200:
                 break
             
             control = pid_controller.get_control()
@@ -209,7 +215,7 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
         trajectories.append(trajectory)
 
     
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    
 
     # Save trajectories to a pickle file
     trajectory_dir = os.path.join(current_dir, 'data')
@@ -249,16 +255,19 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
     if not os.path.exists(plot_dir):
         os.makedirs(plot_dir)
     plt.savefig(f'{plot_dir}/{run_name}.png')
-    
+ 
+    return run_name
     
 # Example usage
 if __name__ == "__main__":
     pid_controller = MavrikPIDController(Mavrik(), dt=0.01)
+    data_path = os.path.join(current_dir, 'data')
+    #system_id = SystemID()
 
-    for max_steps in [500]: #10, 500, 1000]:
-        for num_trajs in [2]: #, 100, 500, 1000]:
+    for max_steps in [200, 300, 400]: #10, 100, 500, 1000]:
+        for num_trajs in [100]: #, 100, 500, 1000]:
             initial_conditions = [
-                {'U': 30, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, np.random.uniform(-100, -10)])}
+                {'U': 30, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, np.random.uniform(-100, -50)])}
                 for i in range(num_trajs)
             ]
             target_conditions = [
@@ -267,3 +276,4 @@ if __name__ == "__main__":
             ]
 
             run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, max_steps=max_steps)
+        #system_id.run()

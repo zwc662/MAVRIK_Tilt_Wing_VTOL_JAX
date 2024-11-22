@@ -3,8 +3,9 @@ slprj
 *.slxc
 Mavrik/
 jax-f16
-jax_mavrik/examples/plots/legacy/*
-jax_mavrik/examples/data/legacy/*
+jax_mavrik/examples/plots/*
+jax_mavrik/examples/data/*
+jax_mavrik/examples/models/*
 
 # From https://github.com/github/gitignore
 
