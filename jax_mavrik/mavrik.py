@@ -123,7 +123,7 @@ if __name__ == "__main__":
 
     
 
-    mavrik = Mavrik(method = 'euler')
+    mavrik = Mavrik(method = 'rk4')
     
     num_steps = int(0.1 / 0.01)
     states = [state]

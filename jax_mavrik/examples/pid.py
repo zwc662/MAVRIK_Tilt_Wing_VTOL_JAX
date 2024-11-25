@@ -14,6 +14,10 @@ import sys
 import pickle
 
 from jax_mavrik.examples.system_id import SystemID
+import jax
+from jax.lib import xla_bridge
+jax.config.update('jax_platform_name', 'cpu')
+
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -56,8 +60,8 @@ class MavrikPIDController:
         self.att_pid_yaw = PIDController(dt, *att_K[2])
 
         # Define expected thrust ranges for normalization
-        self.thrust_min = -10.0  # Example minimum thrust (negative for upward acceleration)
-        self.thrust_max = 10.0   # Example maximum thrust (positive for downward acceleration)
+        self.thrust_xyz_min = np.array([-10.0, -10.0, 0.0])  # Example minimum thrust (negative for upward acceleration)
+        self.thrust_xyz_max = np.array([10.0, 10.0, 10.0])   # Example maximum thrust (positive for downward acceleration)
     
         # State and targets
         self.state = None
@@ -89,11 +93,11 @@ class MavrikPIDController:
             
         return self.state
 
-    def normalize_thrust(self, thrust):
+    def normalize_thrust(self, *thrust_xyz):
         """
         Normalize raw thrust values to the range [-1, 1].
         """
-        return np.clip((thrust - self.thrust_min) / (self.thrust_max - self.thrust_min) * 2 - 1, -1, 1)
+        return np.clip((np.asarray(thrust_xyz) - self.thrust_xyz_min) / (self.thrust_xyz_max - self.thrust_xyz_min) * 2 - 1, -1, 1).tolist()
     
     def clip_control(self, control: np.ndarray) -> jnp.ndarray:
         """
@@ -128,16 +132,14 @@ class MavrikPIDController:
         # Compute raw thrust values from PID controllers
         raw_thrust_x = self.pos_pid_x.compute(self.target_xned[0], xned[0])  # x_e (North)
         raw_thrust_y = self.pos_pid_y.compute(self.target_xned[1], xned[1])  # y_e (East)
-        raw_thrust_z = self.pos_pid_z.compute(self.target_xned[2], xned[2])  # z_e (Down)
+        raw_thrust_z =  - self.pos_pid_z.compute(self.target_xned[2], xned[2])  # z_e (Down)
 
         # Normalize thrust values to [-1, 1]
-        thrust_x = self.normalize_thrust(raw_thrust_x)
-        thrust_y = self.normalize_thrust(raw_thrust_y)
-        thrust_z = self.normalize_thrust(raw_thrust_z)
+        [thrust_x, thrust_y, thrust_z] = self.normalize_thrust(raw_thrust_x, raw_thrust_y, raw_thrust_z) 
 
         # Compute desired roll and pitch from thrusts
-        roll_target = thrust_y / max(thrust_z, 1e-3)  # Prevent division by zero
-        pitch_target = -thrust_x / max(thrust_z, 1e-3)
+        roll_target = np.arctan(thrust_y / max(thrust_z, 1e-3))  # Prevent division by zero
+        pitch_target = np.arctan(-thrust_x / max(thrust_z, 1e-3))
 
         # Compute euler control (desired moments or tilt angles)
         roll_control = self.att_pid_roll.compute(roll_target, euler[0])
@@ -152,7 +154,7 @@ class MavrikPIDController:
         control[self.mavrik.CONTROL.rudder] = yaw_control
 
         # Compute base thrust RPMs
-        rpm_base = (thrust_z + 1) * 3750  # Normalize thrust to [0, 7500]
+        rpm_base = thrust_z * 7500  # Normalize thrust to [0, 7500]
         pitch_adjustment = pitch_control * 100  # Example scaling for pitch
         roll_adjustment = roll_control * 100  # Example scaling for roll
         yaw_adjustment = yaw_control * 100  # Example scaling for yaw
@@ -164,9 +166,9 @@ class MavrikPIDController:
         control[self.mavrik.CONTROL.RPM_right12Out] = np.clip(rpm_base - pitch_adjustment, 0, 7500)  # Front right
 
         # Adjust RPMs for roll (left and right rotors)
-        control[self.mavrik.CONTROL.RPM_leftOut1] += np.clip(roll_adjustment, -7500, 7500)
-        control[self.mavrik.CONTROL.RPM_left6In] += np.clip(roll_adjustment, -7500, 7500)
-        control[self.mavrik.CONTROL.RPM_right7In] -= np.clip(roll_adjustment, -7500, 7500)
+        control[self.mavrik.CONTROL.RPM_leftOut1] += np.clip(roll_adjustment, 0, 7500)
+        control[self.mavrik.CONTROL.RPM_left6In] += np.clip(roll_adjustment, 0, 7500)
+        control[self.mavrik.CONTROL.RPM_right7In] -= np.clip(roll_adjustment, 0, 7500)
         control[self.mavrik.CONTROL.RPM_right12Out] -= np.clip(roll_adjustment, -7500, 7500)
 
         # Adjust RPMs for yaw (tail rotors)
@@ -184,11 +186,11 @@ class MavrikPIDController:
 
 
 
-def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, max_steps=100):
+def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, max_steps=100, run_name=''):
     assert len(initial_conditions) == len(target_conditions), \
         f"Number of initial and target conditions do not match: {len(initial_conditions)=} vs. {len(target_conditions)=}"
 
-    run_name = f"pid_{max_steps}steps_{len(initial_conditions)}trajectories_{get_timestamp()}"
+    run_name = f"{run_name}_pid_{max_steps}steps_{len(initial_conditions)}trajectories_{get_timestamp()}"
     print(f"Running {run_name}...")
     trajectories = []
     for initial_condition, target_condition in zip(initial_conditions, target_conditions):
@@ -200,7 +202,8 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
         for _ in range(max_steps):
             if jnp.isnan(state).any() or \
                 state[pid_controller.mavrik.STATE.Ze] > 10 or \
-                    state[pid_controller.mavrik.STATE.Ze] < -200:
+                    state[pid_controller.mavrik.STATE.Ze] < -200 or \
+                        (state[pid_controller.mavrik.STATE.u: pid_controller.mavrik.STATE.u+3] > 100).any():
                 break
             
             control = pid_controller.get_control()
@@ -233,21 +236,30 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
         states = np.array(trajectory['state'])
         altitudes = -states[:, pid_controller.mavrik.STATE.Ze]
         pitches = states[:, pid_controller.mavrik.STATE.pitch]
-        velocities = np.linalg.norm(states[:, pid_controller.mavrik.STATE.u: pid_controller.mavrik.STATE.u+3], axis=-1)
+        velocities = states[:, pid_controller.mavrik.STATE.u: pid_controller.mavrik.STATE.u+3]
+        speeds = np.linalg.norm(velocities, axis=-1)
+        
 
-        plt.subplot(2, 1, 1)
+        plt.subplot(3, 1, 1)
         plt.plot(altitudes, pitches, color='b')
         plt.scatter(-states[0, pid_controller.mavrik.STATE.Ze], states[0, pid_controller.mavrik.STATE.pitch], color='green', s=50)
         plt.scatter(-states[-1, pid_controller.mavrik.STATE.Ze], states[-1, pid_controller.mavrik.STATE.pitch], color='black', s=50)
         plt.xlabel('Altitude')
         plt.ylabel('Pitch Angle')
 
-        plt.subplot(2, 1, 2)
-        plt.plot(altitudes, velocities, color='r')
-        plt.scatter(-states[0, pid_controller.mavrik.STATE.Ze], velocities[0], color='green', s=50)
-        plt.scatter(-states[-1, pid_controller.mavrik.STATE.Ze], velocities[-1], color='black', s=50)
+        plt.subplot(3, 1, 2)
+        plt.plot(altitudes, speeds, color='r')
+        plt.scatter(-states[0, pid_controller.mavrik.STATE.Ze], speeds[0], color='green', s=50)
+        plt.scatter(-states[-1, pid_controller.mavrik.STATE.Ze], speeds[-1], color='black', s=50)
         plt.xlabel('Altitude')
-        plt.ylabel('Velocity')
+        plt.ylabel('Speed')
+
+        plt.subplot(3, 1, 3)
+        plt.plot(altitudes, velocities[:, -1], color='r')
+        plt.scatter(-states[0, pid_controller.mavrik.STATE.Ze], velocities[0][-1], color='green', s=50)
+        plt.scatter(-states[-1, pid_controller.mavrik.STATE.Ze], velocities[-1][-1], color='black', s=50)
+        plt.xlabel('Altitude')
+        plt.ylabel('Vertical Velocity')
 
     plt.tight_layout()
     
@@ -260,20 +272,29 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
     
 # Example usage
 if __name__ == "__main__":
-    pid_controller = MavrikPIDController(Mavrik(), dt=0.01)
-    data_path = os.path.join(current_dir, 'data')
-    #system_id = SystemID()
 
-    for max_steps in [200, 300, 400]: #10, 100, 500, 1000]:
+    print(f"JAX is using: {xla_bridge.get_backend().platform}")
+
+    # Ensure PID runs on CPU
+    pid_controller = MavrikPIDController(Mavrik(), pos_K = np.random.random([3, 3]) * 2, att_K = np.random.random([3, 3])  * 2, dt=0.01)
+    data_path = os.path.join(current_dir, 'data')
+
+    for max_steps in [10000]: #10, 100, 500, 1000]:
         for num_trajs in [100]: #, 100, 500, 1000]:
             initial_conditions = [
-                {'U': 30, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, np.random.uniform(-100, -50)])}
+                #{'U': 30, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, np.random.uniform(-100, -50)])}
+                {'U': 0, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, 0])}
                 for i in range(num_trajs)
             ]
             target_conditions = [
-                {'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, 0])}
+                #{'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, 0])}
+                {'U': 0, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, np.random.uniform(-100, -50)])}
                 for i in range(num_trajs)
             ]
 
-            run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, max_steps=max_steps)
-        #system_id.run()
+            run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, max_steps=max_steps, run_name = 'hover')
+
+    # Ensure SystemID runs on GPU
+    with jax.default_device(jax.devices("gpu")[0]):
+        system_id = SystemID()
+        system_id.run('hover_1000x100_system_id')
