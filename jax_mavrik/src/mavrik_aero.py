@@ -8,98 +8,76 @@ from jax_mavrik.src.actuator import ActuatorInutState, ActuatorInput, ActuatorOu
 from jax_mavrik.src.utils.mat_tools import euler_to_dcm
 from jax_mavrik.src.utils.jax_types import FloatScalar
 
-import jax
 import jax.numpy as jnp
 from jax import jit
 from jax import vmap
 
 from typing import Tuple, List 
- 
-from concurrent.futures import ThreadPoolExecutor
-
-jax.config.update('jax_platform_name', 'cpu')
-
- 
 
 @jit
-def precompute_breakpoint_data(breakpoints):
-    """
-    Precompute the differences and inverse differences for each breakpoint array
-    to reduce redundant computation during runtime.
-    """
-    differences = jnp.diff(breakpoints)
-    inv_differences = 1.0 / differences
-    return differences, inv_differences
+def linear_interpolate(v0, v1, weight):
+    return v0 * (1 - weight) + v1 * weight
 
 @jit
-def get_index_and_weight(value, breakpoints, differences, inv_differences):
+def get_index_and_weight(value, breakpoints):
     """
-    Finds the index and weight for interpolation along a single dimension
-    using precomputed differences and inverse differences.
+    Finds the index and weight for interpolation along a single dimension.
     """
     idx = jnp.clip(jnp.searchsorted(breakpoints, value) - 1, 0, len(breakpoints) - 2)
-    weight = (value - breakpoints[idx]) * inv_differences[idx]
+    weight = (value - breakpoints[idx]) / (breakpoints[idx + 1] - breakpoints[idx])
     return idx, weight
 
 @jit
-def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], precomputed: List[tuple], values: jnp.ndarray) -> float:
+def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: jnp.ndarray) -> float:
     """
-    Perform n-dimensional interpolation using vectorized JAX operations and
-    precomputed breakpoint differences.
+    Perform n-dimensional interpolation using vectorized JAX operations.
+
+    Args:
+        inputs (jnp.ndarray): The input coordinates at which to interpolate.
+        breakpoints (list of jnp.ndarray): Each array contains the breakpoints for one dimension.
+        values (jnp.ndarray): The values at each grid point with shape matching the breakpoints.
+
+    Returns:
+        jnp.ndarray: Interpolated value.
     """
     ndim = len(breakpoints)
     indices = []
     weights = []
 
-    # Precompute indices and weights
+    # Loop over each dimension instead of using vmap
     for i in range(ndim):
-        idx, weight = get_index_and_weight(inputs[i], breakpoints[i], *precomputed[i])
+        idx, weight = get_index_and_weight(inputs[i], breakpoints[i])
         indices.append(idx)
         weights.append(weight)
 
     indices = jnp.array(indices)
     weights = jnp.array(weights)
 
-    # Generate corner indices using bit-shifting for performance
-    corner_count = 2 ** ndim
-    corner_indices = jnp.array(
-        [[(indices[j] + (corner >> j) & 1) for j in range(ndim)] for corner in range(corner_count)]
-    )
+    # Generate corner indices for interpolation
+    corner_indices = jnp.stack(jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"), axis=-1).reshape(-1, ndim)
 
-    # Compute weights for all corners
-    corner_weights = jnp.prod(
-        jnp.where((jnp.arange(corner_count)[:, None] >> jnp.arange(ndim)) & 1, weights, 1 - weights),
-        axis=1
-    )
+    # Function to compute interpolated values for each corner
+    def compute_corner_value(corner):
+        corner_idx = indices + corner
+        corner_value = values[tuple(corner_idx)]
+        corner_weight = jnp.prod(jnp.where(corner, weights, 1 - weights))
+        return corner_value * corner_weight
 
-    # Efficiently gather values for each corner
-    corner_values = jnp.array([values[tuple(idx)] for idx in corner_indices])
+    # Vectorize computation across all corners
+    interpolated_values = vmap(compute_corner_value)(corner_indices)
 
-    # Compute final interpolated value
-    return jnp.dot(corner_weights, corner_values)
+    # Sum contributions from all corners
+    return jnp.sum(interpolated_values)
 
 class JaxNDInterpolator:
     def __init__(self, breakpoints: List[jnp.ndarray], values: jnp.ndarray):
         self.breakpoints = breakpoints
         self.values = values
-        self.precomputed = [precompute_breakpoint_data(b) for b in breakpoints]
-
-    def __call__(self, inputs: jnp.ndarray) -> float:
-        # Use precomputed data for faster interpolation
-        return interpolate_nd(inputs, self.breakpoints, self.precomputed, self.values)
-
  
-def process_single(cfg):
-    lookup_func, inputs, transform, scale = cfg
-    interpolated = lookup_func(inputs)
-    padded = jnp.array([interpolated, 0.0, 0.0])
-    return jnp.dot(transform, padded * scale)
-
-def process_all(lookup_configs):
-    with ThreadPoolExecutor() as executor:
-        results = list(executor.map(process_single, lookup_configs))
-    return results
-
+    def __call__(self, inputs: jnp.ndarray) -> float:
+        # Use partial to create a JAX-compatible function with fixed breakpoints and values
+        interpolator = ft.partial(interpolate_nd, breakpoints=self.breakpoints, values=self.values)
+        return interpolator(inputs)
 
 class MavrikAero:
     def __init__(self, mavrik_setup: MavrikSetup):
@@ -279,40 +257,8 @@ class MavrikAero:
         CX_hover_fuse_value = mavrik_setup.CX_hover_fuse_val
         self.CX_hover_fuse_lookup_table = JaxNDInterpolator(CX_hover_fuse_breakpoints, CX_hover_fuse_value)
         
+
     def Cx(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Forces:
-        """
-        Compute forces based on interpolations.
-        """
-        CX_Scale = 0.5744 * u.Q
-        CX_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
-        CX_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CX_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
-
-        # Define lookup configurations: (lookup_table, inputs, transform, scale)
-        lookup_configs = [
-            (self.CX_aileron_wing_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron]), wing_transform, CX_Scale),
-            (self.CX_elevator_tail_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator]), tail_transform, CX_Scale),
-            (self.CX_flap_wing_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap]), wing_transform, CX_Scale),
-            (self.CX_rudder_tail_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder]), tail_transform, CX_Scale),
-            (self.CX_tail_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CX_Scale),
-            (self.CX_tail_damp_p_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CX_Scale_p),
-            (self.CX_tail_damp_q_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CX_Scale_q),
-            (self.CX_tail_damp_r_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CX_Scale_r),
-            (self.CX_wing_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CX_Scale),
-            (self.CX_wing_damp_p_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CX_Scale_p),
-            (self.CX_wing_damp_q_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CX_Scale_q),
-            (self.CX_wing_damp_r_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CX_Scale_r),
-            (self.CX_hover_fuse_lookup_table, jnp.array([u.U, u.alpha, u.beta]), jnp.eye(3), CX_Scale),
-        ]
- 
-        results = jnp.array(process_all(lookup_configs))
-
-        # Sum contributions
-        CX_total = jnp.sum(results, axis=0)
-
-        return Forces(CX_total[0], CX_total[1], CX_total[2])
-
-    def Cx_Bakup(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Forces:
         CX_Scale = 0.5744 * u.Q
         CX_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CX_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
@@ -472,54 +418,8 @@ class MavrikAero:
         CY_hover_fuse_value = mavrik_setup.CY_hover_fuse_val
         self.CY_hover_fuse_lookup_table = JaxNDInterpolator(CY_hover_fuse_breakpoints, CY_hover_fuse_value)
 
-        self.CY_lookup_tables = [
-            ft.partial(process_single, self.CY_aileron_wing_lookup_table),
-            ft.partial(process_single, self.CY_elevator_tail_lookup_table),
-            ft.partial(process_single, self.CY_flap_wing_lookup_table),
-            ft.partial(process_single, self.CY_rudder_tail_lookup_table),
-            ft.partial(process_single, self.CY_tail_lookup_table),
-            ft.partial(process_single, self.CY_tail_damp_p_lookup_table),
-            ft.partial(process_single, self.CY_tail_damp_q_lookup_table),
-            ft.partial(process_single, self.CY_tail_damp_r_lookup_table),
-            ft.partial(process_single, self.CY_wing_lookup_table),
-            ft.partial(process_single, self.CY_wing_damp_p_lookup_table),
-            ft.partial(process_single, self.CY_wing_damp_q_lookup_table),
-            ft.partial(process_single, self.CY_wing_damp_r_lookup_table),
-            ft.partial(process_single, self.CY_hover_fuse_lookup_table)
-        ]
 
     def Cy(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Forces:
-        CY_Scale = 0.5744 * u.Q
-        CY_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
-        CY_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
-        CY_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
-
-        # Define lookup configurations: (lookup_table, inputs, transform, scale)
-        lookup_configs = [
-            (self.CY_aileron_wing_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron]), wing_transform, CY_Scale),
-            (self.CY_elevator_tail_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator]), tail_transform, CY_Scale),
-            (self.CY_flap_wing_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap]), wing_transform, CY_Scale),
-            (self.CY_rudder_tail_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder]), tail_transform, CY_Scale),
-            (self.CY_tail_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CY_Scale),
-            (self.CY_tail_damp_p_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CY_Scale_p),
-            (self.CY_tail_damp_q_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CY_Scale_q),
-            (self.CY_tail_damp_r_lookup_table, jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]), tail_transform, CY_Scale_r),
-            (self.CY_wing_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CY_Scale),
-            (self.CY_wing_damp_p_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CY_Scale_p),
-            (self.CY_wing_damp_q_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CY_Scale_q),
-            (self.CY_wing_damp_r_lookup_table, jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]), wing_transform, CY_Scale_r),
-            (self.CY_hover_fuse_lookup_table, jnp.array([u.U, u.alpha, u.beta]), jnp.eye(3), CY_Scale),
-        ]
-
-        
-        results = jnp.array(process_all(lookup_configs))
-      
-        # Sum contributions
-        CY_total = jnp.sum(results, axis=0)
-
-        return Forces(CY_total[0], CY_total[1], CY_total[2])
-
-    def Cy_Bakup(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Forces:
         CY_Scale = 0.5744 * u.Q
         CY_Scale_r = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.r
         CY_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p

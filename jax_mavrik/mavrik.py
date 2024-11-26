@@ -112,8 +112,8 @@ if __name__ == "__main__":
     ])
    
     state = np.array([
-        30.0000, 0, 0,  # Xe Ye Ze
-        0.0000, 0.0000, 0.0000,  # VXe, VYe, VZe
+        30.0, 0, 0, # VXe, VYe, VZe
+        0.0000, 0.0000, 0.0000,   # Xe Ye Ze
         29.9269, 0, 2.0927, # u v w
         0, 0.0698, 0,   # roll, pitch, yaw 
         0.0, 0.0, 0.0,   # p, q, r
@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     mavrik = Mavrik(method = 'rk4')
     
-    num_steps = int(0.1 / 0.01)
+    num_steps = int(0.1 / 0.01) * 10
     states = [state]
     tot_runtime = 0.0
     for i in range(num_steps):
@@ -138,15 +138,15 @@ if __name__ == "__main__":
         print(f">>>>>>>>>>>>>>>>>>>> Iteration: {i} <<<<<<<<<<<<<<<<<<<<<<")
         print(f"Runtime: {runtime:.6f} | Tot: {tot_runtime:.6f} seconds | Avg: {tot_runtime / num_steps:.6f} seconds | State: {state}")
         vned = state[MAVRIK_STATE.VXe:MAVRIK_STATE.VXe+3]
-        print(f"Vned: {vned} | Expected Vned: {expected_vned[i]} | Error: {np.linalg.norm(vned - expected_vned[i])}")
+        print(f"Vned: {vned}")# | Expected Vned: {expected_vned[i]} | Error: {np.linalg.norm(vned - expected_vned[i])}")
         xned = state[MAVRIK_STATE.Xe:MAVRIK_STATE.Xe+3]
-        print(f"Xned: {xned} | Expected Xned: {expected_xned[i]} | Error: {np.linalg.norm(xned - expected_xned[i])}")
+        print(f"Xned: {xned}")# | Expected Xned: {expected_xned[i]} | Error: {np.linalg.norm(xned - expected_xned[i])}")
         vb = state[MAVRIK_STATE.u:MAVRIK_STATE.u+3]
-        print(f"Vb: {vb} | Expected Vb: {expected_vb[i]} | Error: {np.linalg.norm(vb - expected_vb[i])}")
+        print(f"Vb: {vb}")# | Expected Vb: {expected_vb[i]} | Error: {np.linalg.norm(vb - expected_vb[i])}")
         euler = state[MAVRIK_STATE.roll:MAVRIK_STATE.roll+3]
-        print(f"Euler: {euler} | Expected Euler: {expected_euler[i]} | Error: {np.linalg.norm(euler - expected_euler[i])}")
+        print(f"Euler: {euler}")# | Expected Euler: {expected_euler[i]} | Error: {np.linalg.norm(euler - expected_euler[i])}")
          
-        expected_dcm = euler_to_dcm(*expected_euler[i])
-        vned_transformed = expected_dcm @ expected_vned[i]
-        print(f"DCM @ Expected Vned: {vned_transformed} | Expected Vb: {expected_vb[i]} | Error: {np.linalg.norm(vned_transformed - expected_vb[i])}")
+        #expected_dcm = euler_to_dcm(*expected_euler[i])
+        #vned_transformed = expected_dcm @ expected_vned[i]
+        #print(f"DCM @ Expected Vned: {vned_transformed} | Expected Vb: {expected_vb[i]} | Error: {np.linalg.norm(vned_transformed - expected_vb[i])}")
     #print("States:", states)

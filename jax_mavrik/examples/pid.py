@@ -176,9 +176,12 @@ class MavrikPIDController:
         control[self.mavrik.CONTROL.RPM_tailRight] = np.clip(rpm_base - yaw_adjustment, 0, 7500)
 
         # Symmetric adjustment for mid rotors
-        mid_rotors = range(self.mavrik.CONTROL.RPM_left2, self.mavrik.CONTROL.RPM_right11 + 1)
-        for i in mid_rotors:
-            control[i] = np.clip(rpm_base, 0, 7500)
+        mid_rotors_left = range(self.mavrik.CONTROL.RPM_left2, self.mavrik.CONTROL.RPM_left6In + 1)
+        mid_rotors_right = range(self.mavrik.CONTROL.RPM_right7In, self.mavrik.CONTROL.RPM_right11 + 1)
+        for i in mid_rotors_left:
+            control[i] = np.clip(rpm_base + pitch_adjustment - roll_adjustment, 0, 7500)
+        for i in mid_rotors_right:
+            control[i] = np.clip(rpm_base + pitch_adjustment + roll_adjustment, 0, 7500)
                     
         # Clip control inputs
         control = self.clip_control(control)
@@ -236,7 +239,7 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
         states = np.array(trajectory['state'])
         altitudes = -states[:, pid_controller.mavrik.STATE.Ze]
         pitches = states[:, pid_controller.mavrik.STATE.pitch]
-        velocities = states[:, pid_controller.mavrik.STATE.u: pid_controller.mavrik.STATE.u+3]
+        velocities = states[:, pid_controller.mavrik.STATE.Vxe: pid_controller.mavrik.STATE.Vxe+3]
         speeds = np.linalg.norm(velocities, axis=-1)
         
 

@@ -8,6 +8,18 @@ import jax
 import optax
 from flax import linen as nn
 from flax.training import train_state
+import os
+import pickle
+
+import datetime
+
+import matplotlib.pyplot as plt
+
+
+current_dir = os.path.dirname(os.path.abspath(__file__))
+
+timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
 
 
 class Actor(nn.Module):
@@ -100,23 +112,105 @@ class SAC:
         )
          
                    
-if __name__ == "__main__":
+def run(max_steps = 1000, num_episodes = 1_000_000_000):
     env = MavrikEnv()
     sac = SAC(state_dim=env.observation_space.shape[0], action_dim=env.action_space.shape[0])
-    num_episodes=1_000_000_000
     
     for episode in range(num_episodes):
         state = env.reset()
-        done = False
-        while not done:
+        done = 1
+        episode_reward = 0
+        steps = 0
+        while done >= 0 and steps <= max_steps:
             action = sac.select_action(state)
             next_state, reward, done, _ = env.step(action)
             sac.update(state, action, reward, next_state, done)
             state = next_state
+            episode_reward += reward
+            steps += 1
+        print(f"Episode: {episode}, Reward: {episode_reward}, Done: {done}")
 
-            
-            print(f"Episode: {episode}, Reward: {reward}, Done: {done}")
-            
+        if episode % 20 == 0:
+            trajectories = []
 
-                
+            for _ in range(10):
+                state = env.reset()
+                done = 1
+                trajectory = {'state': [], 'action': [], 'reward': []}
+                total_reward = 0
+                while done >= 0 and steps <= max_steps:
+                    action = sac.select_action(state)
+                    next_state, reward, done, _ = env.step(action)
+                    sac.update(state, action, reward, next_state, done)
+                    trajectory['state'].append(state)
+                    trajectory['action'].append(action)
+                    trajectory['reward'].append(reward)
+                    state = next_state
+                    total_reward += reward
+                trajectories.append(trajectory)
+            
+            # Compute average total reward
+            average_total_reward = np.mean([sum(t['reward']) for t in trajectories])
+            print(f"Average Total Reward: {average_total_reward}")
+
+            # Save trajectories to a pickle file
+            trajectory_dir = os.path.join(current_dir, 'data')
+            if not os.path.exists(trajectory_dir):
+                os.makedirs(trajectory_dir)
+            with open(f'{trajectory_dir}/hover_sac_10trajectories_{timestamp}.pt', 'wb') as f:
+                pickle.dump(trajectories, f)
  
+            # Plotting
+            plt.figure(figsize=(12, 8))
+            for trajectory in trajectories:
+                states = np.array(trajectory['state'])
+                altitudes = - states[:, env.mavrik.STATE.Ze]
+                pitches = states[:, env.mavrik.STATE.pitch]
+                speeds = np.sqrt(np.sum(states[:, env.mavrik.STATE.VXe:env.mavrik.STATE.VZe+1] ** 2, axis=1))
+                vertical_velocities = -states[:, env.mavrik.STATE.VZe]
+
+                plt.subplot(3, 1, 1)
+                plt.plot(altitudes, pitches, color='b')
+                plt.scatter(altitudes[0], pitches[0], color='green', s=50)
+                plt.scatter(altitudes[-1], pitches[-1], color='black', s=50)
+                plt.xlabel('Altitude')
+                plt.ylabel('Pitch Angle')
+
+                plt.subplot(3, 1, 2)
+                plt.plot(altitudes, speeds, color='r')
+                plt.scatter(altitudes[0], speeds[0], color='green', s=50)
+                plt.scatter(altitudes[-1], speeds[-1], color='black', s=50)
+                plt.xlabel('Altitude')
+                plt.ylabel('Speed')
+
+                plt.subplot(3, 1, 3)
+                plt.plot(altitudes, vertical_velocities, color='r')
+                plt.scatter(altitudes[0], vertical_velocities[0], color='green', s=50)
+                plt.scatter(altitudes[-1], vertical_velocities[-1], color='black', s=50)
+                plt.xlabel('Altitude')
+                plt.ylabel('Vertical Velocity')
+
+            plt.tight_layout()
+            plot_dir = os.path.join(current_dir, 'plots')
+            if not os.path.exists(plot_dir):
+                os.makedirs(plot_dir)
+            plt.savefig(f'{plot_dir}/hover_sac_10trajectories_ep{episode}_{timestamp}.png')
+            #plt.show()
+            
+            # Save the model parameters
+            model_dir = os.path.join(current_dir, 'models')
+            if not os.path.exists(model_dir):
+                os.makedirs(model_dir)
+            with open(f'{model_dir}/hover_sac_actor_params_{timestamp}.pkl', 'wb') as f:
+                pickle.dump(sac.actor_state.params, f)
+            with open(f'{model_dir}/hover_sac_critic1_params_{timestamp}.pkl', 'wb') as f:
+                pickle.dump(sac.critic1_state.params, f)
+            with open(f'{model_dir}/hover_sac_critic2_params_{timestamp}.pkl', 'wb') as f:
+                pickle.dump(sac.critic2_state.params, f)
+            with open(f'{model_dir}/hover_sac_target_critic1_params_{timestamp}.pkl', 'wb') as f:
+                pickle.dump(sac.target_critic1_state.params, f)
+            with open(f'{model_dir}/hover_sac_target_critic2_params_{timestamp}.pkl', 'wb') as f:
+                pickle.dump(sac.target_critic2_state.params, f)
+                
+if __name__ == "__main__":
+    run()
