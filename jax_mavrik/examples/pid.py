@@ -239,28 +239,28 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
         states = np.array(trajectory['state'])
         altitudes = -states[:, pid_controller.mavrik.STATE.Ze]
         pitches = states[:, pid_controller.mavrik.STATE.pitch]
-        velocities = states[:, pid_controller.mavrik.STATE.Vxe: pid_controller.mavrik.STATE.Vxe+3]
+        velocities = states[:, pid_controller.mavrik.STATE.VXe: pid_controller.mavrik.STATE.VXe+3]
         speeds = np.linalg.norm(velocities, axis=-1)
         
 
         plt.subplot(3, 1, 1)
         plt.plot(altitudes, pitches, color='b')
-        plt.scatter(-states[0, pid_controller.mavrik.STATE.Ze], states[0, pid_controller.mavrik.STATE.pitch], color='green', s=50)
-        plt.scatter(-states[-1, pid_controller.mavrik.STATE.Ze], states[-1, pid_controller.mavrik.STATE.pitch], color='black', s=50)
+        plt.scatter(altitudes[0], pitches[0], color='green', s=50)
+        plt.scatter(altitudes[-1], pitches[-1], color='black', s=50)
         plt.xlabel('Altitude')
         plt.ylabel('Pitch Angle')
 
         plt.subplot(3, 1, 2)
         plt.plot(altitudes, speeds, color='r')
-        plt.scatter(-states[0, pid_controller.mavrik.STATE.Ze], speeds[0], color='green', s=50)
-        plt.scatter(-states[-1, pid_controller.mavrik.STATE.Ze], speeds[-1], color='black', s=50)
+        plt.scatter(altitudes[0], speeds[0], color='green', s=50)
+        plt.scatter(altitudes[-1], speeds[-1], color='black', s=50)
         plt.xlabel('Altitude')
         plt.ylabel('Speed')
 
         plt.subplot(3, 1, 3)
         plt.plot(altitudes, velocities[:, -1], color='r')
-        plt.scatter(-states[0, pid_controller.mavrik.STATE.Ze], velocities[0][-1], color='green', s=50)
-        plt.scatter(-states[-1, pid_controller.mavrik.STATE.Ze], velocities[-1][-1], color='black', s=50)
+        plt.scatter(altitudes[0], velocities[0][-1], color='green', s=50)
+        plt.scatter(altitudes[-1], velocities[-1][-1], color='black', s=50)
         plt.xlabel('Altitude')
         plt.ylabel('Vertical Velocity')
 

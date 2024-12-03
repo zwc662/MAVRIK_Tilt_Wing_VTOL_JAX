@@ -14,7 +14,7 @@ class MavrikEnv(gym.Env):
         self.target_altitude = 0.0
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.mavrik.state_ndim,), dtype=np.float32)
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32)
-        self.max_velocity = 50.
+        self.max_velocity = 5.
         self.state = self.reset()
     
     def clip_control(self, control: np.ndarray) -> jnp.ndarray:
@@ -94,10 +94,10 @@ class MavrikEnv(gym.Env):
 
     def reset(self, 
               U: float = 0.0, 
-              euler: np.ndarray = np.array([0, 0.0698, 0]), 
-              xned: np.array = np.array([0, 0, 0]), 
-              target_altitude: Optional[np.array] = np.random.random() * 50 + 50 #np.array([100, 0, 0])
-              ): #np.array([0, 0, 0])):
+              euler: np.ndarray = np.array([0, 0.0698 + np.random.random() * np.pi/6., 0]), 
+              xned: np.array = np.array([np.random.random() - 0.5, np.random.random() - 0.5, 0]), 
+              target_altitude: Optional[np.array] = 3
+              ):
         vned = np.array([U, 0, 0])
         vb = self.mavrik.ned2xyz(euler, vned)
         self.state = np.array([
@@ -121,7 +121,8 @@ class MavrikEnv(gym.Env):
         altitude = state[self.mavrik.STATE.Ze]  # Assuming the first three elements of the state are the position
         distance = np.maximum(0, altitude - self.target_altitude)
         square_velocity = np.sum(state[self.mavrik.STATE.VXe:self.mavrik.STATE.VXe+3]**2)
-        reward = np.exp(-distance) - square_velocity / (3 * self.max_velocity**2) # The closer to the target, the greater the reward (less negative)
+        verticle_speed = np.abs(state[self.mavrik.STATE.VZe]).item()
+        reward = np.exp(-distance) - verticle_speed / self.max_velocity #square_velocity / (3 * self.max_velocity**2) # The closer to the target, the greater the reward (less negative)
         
         return reward
 
@@ -142,9 +143,10 @@ class MavrikEnv(gym.Env):
                 (state[self.mavrik.STATE.u: self.mavrik.STATE.u+3] > self.max_velocity).any():
             print("Out of bounds. Ending episode.")
             return -1
-        if  distance < 5.0 and speed < 5.0:
-            #print("Done Done Done")
-            return 0 # Consider done if within 5 unit of the target while speed below 5 units
-        else:
-            return 0
+        return 0
+        #if  distance < 1.0 and speed < 5.0:
+        #    #print("Done Done Done")
+        #    return 0 # Consider done if within 5 unit of the target while speed below 5 units
+        #else:
+        #    return 0
          
