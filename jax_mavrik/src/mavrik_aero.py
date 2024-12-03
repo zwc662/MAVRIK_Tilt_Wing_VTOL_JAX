@@ -128,8 +128,8 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos(actuator_outputs.wing_tilt), 0, jnp.sin(actuator_outputs.wing_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.wing_tilt), 0., jnp.cos(actuator_outputs.wing_tilt)]]);
         tail_transform = jnp.array([[jnp.cos(actuator_outputs.tail_tilt), 0, jnp.sin(actuator_outputs.tail_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.tail_tilt), 0., jnp.cos(actuator_outputs.tail_tilt)]])
 
-        forces, moments, actuator_outputs = self.parallel_interpolate(actuator_outputs, wing_transform, tail_transform)
-        #forces, moments, actuator_outputs = self.interpolate(actuator_outputs, wing_transform, tail_transform)
+        #forces, moments, actuator_outputs = self.parallel_interpolate(actuator_outputs, wing_transform, tail_transform)
+        forces, moments, actuator_outputs = self.interpolate(actuator_outputs, wing_transform, tail_transform)
 
         return forces, moments, actuator_outputs
     
