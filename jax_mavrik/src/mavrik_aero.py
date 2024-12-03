@@ -13,12 +13,9 @@ from jax import jit
 from jax import vmap
 
 from typing import Tuple, List, NamedTuple
+ 
 
-#@jit
-def linear_interpolate(v0, v1, weight):
-    return v0 * (1 - weight) + v1 * weight
-
-#@jit
+@jit
 def get_index_and_weight(value, breakpoints):
     """
     Compute the base index and interpolation weight for a given value and breakpoints.
@@ -41,25 +38,43 @@ class JaxNDInterpolator(NamedTuple):
     breakpoints: List[jnp.ndarray]
     values: jnp.ndarray
     ndim: int 
-    shape: jnp.ndarray
-    corner_offsets: jnp.ndarray
+    shape: Tuple[int]
+    corner_offsets: List[int]
     flat_values: jnp.ndarray
 
 def get_interpolator(breakpoints, values):
     ndim = len(breakpoints)
-    shape = jnp.array(values.shape)
+    shape = tuple(values.shape)
 
     # Precompute all corner offsets
     corner_offsets = jnp.stack(
         jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"),
         axis=-1
-    ).reshape(-1, ndim)
+    ).reshape(-1, ndim).astype(int) 
 
     # Flatten values for efficient indexing
     flat_values = values.flatten()
     return JaxNDInterpolator(breakpoints=breakpoints, values=values, ndim=ndim, shape=shape, corner_offsets=corner_offsets, flat_values=flat_values)
-     
- 
+
+@jit
+def interpolate(indices: jnp.ndarray, weights: jnp.ndarray, interpoloator: JaxNDInterpolator) -> jnp.ndarray:
+    # Compute all corner indices
+    corner_indices = indices + interpoloator.corner_offsets
+    corner_indices = jnp.clip(corner_indices, 0, jnp.array(interpoloator.shape) - 1)
+
+    # Convert n-dimensional indices to flat indices
+    flat_corner_indices = jnp.ravel_multi_index(corner_indices.T, interpoloator.shape)
+
+    # Gather corner values
+    corner_values = interpoloator.flat_values[flat_corner_indices]
+
+    # Compute weights for all corners
+    corner_weights = jnp.prod(jnp.where(interpoloator.corner_offsets, weights, 1 - weights), axis=1)
+
+    # Sum weighted corner contributions
+    return jnp.sum(corner_values * corner_weights)
+
+
 def interpolate_nd(inputs: jnp.ndarray, interpoloator: JaxNDInterpolator) -> jnp.ndarray:
     """
     Perform efficient multi-dimensional interpolation for a single input point.
@@ -76,22 +91,9 @@ def interpolate_nd(inputs: jnp.ndarray, interpoloator: JaxNDInterpolator) -> jnp
     ])
     indices = idx_and_weights[:, 0].astype(int)
     weights = idx_and_weights[:, 1]
-
-    # Compute all corner indices
-    corner_indices = indices + interpoloator.corner_offsets
-    corner_indices = jnp.clip(corner_indices, 0, interpoloator.shape - 1)
-
-    # Convert n-dimensional indices to flat indices
-    flat_corner_indices = jnp.ravel_multi_index(corner_indices.T, interpoloator.shape)
-
-    # Gather corner values
-    corner_values = interpoloator.flat_values[flat_corner_indices]
-
-    # Compute weights for all corners
-    corner_weights = jnp.prod(jnp.where(interpoloator.corner_offsets, weights, 1 - weights), axis=1)
-
-    # Sum weighted corner contributions
-    return jnp.sum(corner_values * corner_weights)
+ 
+    return interpolate(indices, weights, interpoloator)
+    
      
 class CX_LOOKUP_TABLES(NamedTuple):
     CX_aileron_wing_lookup_table: JaxNDInterpolator
@@ -1981,7 +1983,6 @@ class MavrikAero:
                           )
 
         return forces, moments, actuator_outputs
-    
      
 
 
