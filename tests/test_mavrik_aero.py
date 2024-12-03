@@ -4,7 +4,10 @@ import pytest
 import os
 import sys
 
-from jax_mavrik.src.mavrik_aero import MavrikAero
+from jax_mavrik.src.mavrik_aero import (
+    MavrikAero,
+    Cx, Cy, Cz, L, M, N, Ct, Kq
+)
 
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs
@@ -144,7 +147,7 @@ def mavrik_aero():
     mavrik_setup = MavrikSetup(file_path=os.path.join(
         os.path.dirname(os.path.dirname(__file__)), "jax_mavrik/aero_export.mat")
     )
-    return MavrikAero(mavrik_setup=mavrik_setup)
+    return MavrikAero.create(mavrik_setup=mavrik_setup)
 
 
 @pytest.fixture

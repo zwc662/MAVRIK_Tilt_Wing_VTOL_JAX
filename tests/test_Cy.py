@@ -4,7 +4,7 @@ import pytest
 import os
 import sys
 
-from jax_mavrik.src.mavrik_aero import MavrikAero
+from jax_mavrik.src.mavrik_aero import MavrikAero, Cy, interpolate_nd, CY_LOOKUP_TABLES, RPM_TRANSFORMS
 
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs, Forces
@@ -14,7 +14,7 @@ from jax_mavrik.src.utils.mat_tools import euler_to_dcm
 
 import jax.numpy as jnp
 
-from .test_mavrik_aero import expected_actuator_outputs_values as actuator_outputs_values, expected_Cy_outputs_values as expected_CY_outputs_values
+from .test_mavrik_aero import mavrik_aero, expected_actuator_outputs_values as actuator_outputs_values, expected_Cy_outputs_values as expected_CY_outputs_values
 
 
 expected_CY_alieron_wing_values = jnp.zeros([11])
@@ -80,14 +80,7 @@ expected_wind_transform = jnp.repeat(jnp.diag(jnp.array([1., 1., 1.]))[None, :, 
 expected_tail_transform = jnp.repeat(jnp.diag(jnp.array([1., 1., 1.]))[None, :, :], 11, axis=0) 
 
 
-
-@pytest.fixture
-def mavrik_aero():
-    mavrik_setup = MavrikSetup(file_path=os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "jax_mavrik/aero_export.mat")
-    )
-    return MavrikAero(mavrik_setup=mavrik_setup)
-
+ 
 
 @pytest.mark.parametrize(
     "id, actuator_outputs_values, \
@@ -110,7 +103,12 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
         
     print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")
     
-    F2 = mavrik_aero.Cy(u)
+
+    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
+    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+    
+
+    F2 = mavrik_aero.Cy(u, wing_transform, tail_transform)
     F2_array = jnp.array([F2.Fx, F2.Fy, F2.Fz])
     CY_outputs_values_close = jnp.allclose(F2_array, expected_CY_outputs_values, atol=0.001)
     print("CY_outputs_values_close???", CY_outputs_values_close)
@@ -139,9 +137,6 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     if not jnp.allclose(CY_Scale_r, expected_CY_Scale_r_values, atol=0.001):
         print(f"\n  Expected: {expected_CY_Scale_r_values}\n  Got: {CY_Scale_r}") 
     
-    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
-    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-    
     print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=0.001))
     if not jnp.allclose(wing_transform, expected_wind_transform, atol=0.001):
         print(f"\n  Expected: {expected_wind_transform}\n  Got: {wing_transform}")
@@ -154,90 +149,118 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
         max_diff_index_tail_transform = jnp.argmax(jnp.abs(tail_transform - expected_tail_transform))
         print(f"\n  Max difference in tail_transform at index {max_diff_index_tail_transform}: Expected {expected_tail_transform[max_diff_index_tail_transform]}, Got {tail_transform[max_diff_index_tail_transform]}")
    
-    CY_aileron_wing = mavrik_aero.CY_aileron_wing_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
-    ]))
+    Cy_lookup_tables = mavrik_aero.Cy_lookup_tables
+
+    CY_aileron_wing = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron]),
+        breakpoints=Cy_lookup_tables.CY_aileron_wing_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_aileron_wing_lookup_table.values
+    )
     CY_aileron_wing_padded = jnp.array([0.0, CY_aileron_wing, 0.0])
-    CY_aileron_wing_padded_transformed = jnp.dot(wing_transform, CY_aileron_wing_padded * CY_Scale)    
-    
-    CY_elevator_tail = mavrik_aero.CY_elevator_tail_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
-    ]))
+    CY_aileron_wing_padded_transformed = jnp.dot(wing_transform, CY_aileron_wing_padded * CY_Scale)
+
+    CY_elevator_tail = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator]),
+        breakpoints=Cy_lookup_tables.CY_elevator_tail_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_elevator_tail_lookup_table.values
+    )
     CY_elevator_tail_padded = jnp.array([0.0, CY_elevator_tail, 0.0])
     CY_elevator_tail_padded_transformed = jnp.dot(tail_transform, CY_elevator_tail_padded * CY_Scale)
 
-    CY_flap_wing = mavrik_aero.CY_flap_wing_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
-    ]))
+    CY_flap_wing = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap]),
+        breakpoints=Cy_lookup_tables.CY_flap_wing_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_flap_wing_lookup_table.values
+    )
     CY_flap_wing_padded = jnp.array([0.0, CY_flap_wing, 0.0])
     CY_flap_wing_padded_transformed = jnp.dot(wing_transform, CY_flap_wing_padded * CY_Scale)
 
-    CY_rudder_tail = mavrik_aero.CY_rudder_tail_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
-    ]))
+    CY_rudder_tail = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder]),
+        breakpoints=Cy_lookup_tables.CY_rudder_tail_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_rudder_tail_lookup_table.values
+    )
     CY_rudder_tail_padded = jnp.array([0.0, CY_rudder_tail, 0.0])
     CY_rudder_tail_padded_transformed = jnp.dot(tail_transform, CY_rudder_tail_padded * CY_Scale)
 
     # Tail
-    CY_tail = mavrik_aero.CY_tail_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ]))
+    CY_tail = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_tail_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_tail_lookup_table.values
+    )
     CY_tail_padded = jnp.array([0.0, CY_tail, 0.0])
     CY_tail_padded_transformed = jnp.dot(tail_transform, CY_tail_padded * CY_Scale)
 
     # Tail Damp p
-    CY_tail_damp_p = mavrik_aero.CY_tail_damp_p_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ])) 
+    CY_tail_damp_p = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_tail_damp_p_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_tail_damp_p_lookup_table.values
+    )
     CY_tail_damp_p_padded = jnp.array([0.0, CY_tail_damp_p, 0.0])
     CY_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_p_padded * CY_Scale_p)
 
     # Tail Damp q
-    CY_tail_damp_q = mavrik_aero.CY_tail_damp_q_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ]))
+    CY_tail_damp_q = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_tail_damp_q_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_tail_damp_q_lookup_table.values
+    )
     CY_tail_damp_q_padded = jnp.array([0.0, CY_tail_damp_q, 0.0])
     CY_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_q_padded * CY_Scale_q)
 
     # Tail Damp r
-    CY_tail_damp_r = mavrik_aero.CY_tail_damp_r_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ]))
+    CY_tail_damp_r = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_tail_damp_r_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_tail_damp_r_lookup_table.values
+    )
     CY_tail_damp_r_padded = jnp.array([0.0, CY_tail_damp_r, 0.0])
     CY_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_r_padded * CY_Scale_r)
 
     # Wing
-    CY_wing = mavrik_aero.CY_wing_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CY_wing = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_wing_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_wing_lookup_table.values
+    )
     CY_wing_padded = jnp.array([0.0, CY_wing, 0.0])
     CY_wing_padded_transformed = jnp.dot(wing_transform, CY_wing_padded * CY_Scale)
 
     # Wing Damp p
-    CY_wing_damp_p = mavrik_aero.CY_wing_damp_p_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CY_wing_damp_p = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_wing_damp_p_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_wing_damp_p_lookup_table.values
+    )
     CY_wing_damp_p_padded = jnp.array([0.0, CY_wing_damp_p, 0.0])
     CY_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_p_padded * CY_Scale_p)
 
     # Wing Damp q
-    CY_wing_damp_q = mavrik_aero.CY_wing_damp_q_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CY_wing_damp_q = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_wing_damp_q_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_wing_damp_q_lookup_table.values
+    )
     CY_wing_damp_q_padded = jnp.array([0.0, CY_wing_damp_q, 0.0])
     CY_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_q_padded * CY_Scale_q)
 
     # Wing Damp r
-    CY_wing_damp_r = mavrik_aero.CY_wing_damp_r_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CY_wing_damp_r = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cy_lookup_tables.CY_wing_damp_r_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_wing_damp_r_lookup_table.values
+    )
     CY_wing_damp_r_padded = jnp.array([0.0, CY_wing_damp_r, 0.0])
     CY_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_r_padded * CY_Scale_r)
 
     # Hover Fuse
-    CY_hover_fuse = mavrik_aero.CY_hover_fuse_lookup_table(jnp.array([
-        u.U, u.alpha, u.beta
-    ]))
+    CY_hover_fuse = interpolate_nd(
+        jnp.array([u.U, u.alpha, u.beta]),
+        breakpoints=Cy_lookup_tables.CY_hover_fuse_lookup_table.breakpoints,
+        values=Cy_lookup_tables.CY_hover_fuse_lookup_table.values
+    )
     CY_hover_fuse_padded = jnp.array([0.0, CY_hover_fuse * CY_Scale, 0.0])
      
     CY_aileron_wing_close = jnp.allclose(CY_aileron_wing, expected_CY_alieron_wing_values, atol=0.001)

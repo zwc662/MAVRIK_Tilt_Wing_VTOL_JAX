@@ -4,7 +4,8 @@ import pytest
 import os
 import sys
 
-from jax_mavrik.src.mavrik_aero import MavrikAero
+from jax_mavrik.src.mavrik_aero import MavrikAero, Cz, interpolate_nd, CY_LOOKUP_TABLES, RPM_TRANSFORMS
+
 
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs, Forces
@@ -14,7 +15,7 @@ from jax_mavrik.src.utils.mat_tools import euler_to_dcm
 
 import jax.numpy as jnp
 
-from .test_mavrik_aero import expected_actuator_outputs_values as actuator_outputs_values, expected_Cz_outputs_values as expected_CZ_outputs_values
+from .test_mavrik_aero import mavrik_aero, expected_actuator_outputs_values as actuator_outputs_values, expected_Cz_outputs_values as expected_CZ_outputs_values
 
 
 expected_CZ_alieron_wing_values = jnp.zeros([11])
@@ -95,16 +96,7 @@ expected_CZ_Scale_r_values = jnp.array([
 expected_wind_transform = jnp.repeat(jnp.diag(jnp.array([1., 1., 1.]))[None, :, :], 11, axis=0)
 expected_tail_transform = jnp.repeat(jnp.diag(jnp.array([1., 1., 1.]))[None, :, :], 11, axis=0) 
 
-
-
-@pytest.fixture
-def mavrik_aero():
-    mavrik_setup = MavrikSetup(file_path=os.path.join(
-        os.path.dirname(os.path.dirname(__file__)), "jax_mavrik/aero_export.mat")
-    )
-    return MavrikAero(mavrik_setup=mavrik_setup)
-
-
+ 
 @pytest.mark.parametrize(
     "id, actuator_outputs_values, \
         expected_CZ_outputs_values, expected_CZ_alieron_wing_values, expected_CZ_elevator_tail_values, expected_CZ_flap_wing_values, expected_CZ_ruder_tail_values, expected_CZ_tail_values, expected_CZ_tail_damp_p_values, expected_CZ_tail_damp_q_values, expected_CZ_tail_damp_r_values, expected_CZ_wing_values, expected_CZ_wing_damp_p_values, expected_CZ_wing_damp_q_values, expected_CZ_wing_damp_r_values, expected_CZ_hover_fuse_values, \
@@ -126,7 +118,12 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
         
     print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")
     
-    F3 = mavrik_aero.Cz(u)
+
+    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
+    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+
+
+    F3 = mavrik_aero.Cz(u, wing_transform, tail_transform)
     F3_array = jnp.array([F3.Fx, F3.Fy, F3.Fz])
     CZ_outputs_values_close = jnp.allclose(F3_array, expected_CZ_outputs_values, atol=0.001)
     print("CZ_outputs_values_close???", CZ_outputs_values_close)
@@ -155,9 +152,6 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     if not jnp.allclose(CZ_Scale_r, expected_CZ_Scale_r_values, atol=0.001):
         print(f"\n  Expected: {expected_CZ_Scale_r_values}\n  Got: {CZ_Scale_r}") 
    
-    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
     print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=0.001))
     if not jnp.allclose(wing_transform, expected_wind_transform, atol=0.001):
         print(f"\n  Expected: {expected_wind_transform}\n  Got: {wing_transform}")
@@ -170,92 +164,119 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
         max_diff_index_tail_transform = jnp.argmax(jnp.abs(tail_transform - expected_tail_transform))
         print(f"\n  Max difference in tail_transform at index {max_diff_index_tail_transform}: Expected {expected_tail_transform[max_diff_index_tail_transform]}, Got {tail_transform[max_diff_index_tail_transform]}")
    
-        
-    CZ_aileron_wing = mavrik_aero.CZ_aileron_wing_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
-    ]))
+    Cz_lookup_tables = mavrik_aero.Cz_lookup_tables
+
+    CZ_aileron_wing = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron]),
+        breakpoints = Cz_lookup_tables.CZ_aileron_wing_lookup_table.breakpoints,
+        values = Cz_lookup_tables.CZ_aileron_wing_lookup_table.values
+    )
     CZ_aileron_wing_padded = jnp.array([0.0, 0.0, CZ_aileron_wing])
     CZ_aileron_wing_padded_transformed = jnp.dot(wing_transform, CZ_aileron_wing_padded * CZ_Scale)
 
-    CZ_elevator_tail = mavrik_aero.CZ_elevator_tail_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
-    ]))
+    CZ_elevator_tail = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator]),
+        breakpoints = Cz_lookup_tables.CZ_elevator_tail_lookup_table.breakpoints,
+        values = Cz_lookup_tables.CZ_elevator_tail_lookup_table.values
+    )
     CZ_elevator_tail_padded = jnp.array([0.0, 0.0, CZ_elevator_tail])
     CZ_elevator_tail_padded_transformed = jnp.dot(tail_transform, CZ_elevator_tail_padded * CZ_Scale)
 
     
-    CZ_flap_wing = mavrik_aero.CZ_flap_wing_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
-    ]))
+    CZ_flap_wing = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap]),
+        breakpoints=Cz_lookup_tables.CZ_flap_wing_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_flap_wing_lookup_table.values
+    )
     CZ_flap_wing_padded = jnp.array([0.0, 0.0, CZ_flap_wing])
     CZ_flap_wing_padded_transformed = jnp.dot(wing_transform, CZ_flap_wing_padded * CZ_Scale)
 
-    CZ_rudder_tail = mavrik_aero.CZ_rudder_tail_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
-    ]))
+    CZ_rudder_tail = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder]),
+        breakpoints=Cz_lookup_tables.CZ_rudder_tail_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_rudder_tail_lookup_table.values
+    )
     CZ_rudder_tail_padded = jnp.array([0.0, 0.0, CZ_rudder_tail])
     CZ_rudder_tail_padded_transformed = jnp.dot(tail_transform, CZ_rudder_tail_padded * CZ_Scale)
 
     # Tail
-    CZ_tail = mavrik_aero.CZ_tail_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ]))
+    CZ_tail = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_tail_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_tail_lookup_table.values
+    )
     CZ_tail_padded = jnp.array([0.0, 0.0, CZ_tail])
     CZ_tail_padded_transformed = jnp.dot(tail_transform, CZ_tail_padded * CZ_Scale)
 
     # Tail Damp p
-    CZ_tail_damp_p = mavrik_aero.CZ_tail_damp_p_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ]))
+    CZ_tail_damp_p = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_tail_damp_p_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_tail_damp_p_lookup_table.values
+    )
     CZ_tail_damp_p_padded = jnp.array([0.0, 0.0, CZ_tail_damp_p])
     CZ_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_p_padded * CZ_Scale_p)
 
     # Tail Damp q
-    CZ_tail_damp_q = mavrik_aero.CZ_tail_damp_q_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ]))
+    CZ_tail_damp_q = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_tail_damp_q_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_tail_damp_q_lookup_table.values
+    )
     CZ_tail_damp_q_padded = jnp.array([0.0, 0.0, CZ_tail_damp_q])
     CZ_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_q_padded * CZ_Scale_q)
 
     # Tail Damp r
-    CZ_tail_damp_r = mavrik_aero.CZ_tail_damp_r_lookup_table(jnp.array([
-        u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
-    ]))
+    CZ_tail_damp_r = interpolate_nd(
+        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_tail_damp_r_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_tail_damp_r_lookup_table.values
+    )
     CZ_tail_damp_r_padded = jnp.array([0.0, 0.0, CZ_tail_damp_r])
     CZ_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_r_padded * CZ_Scale_r)
 
     # Wing
-    CZ_wing = mavrik_aero.CZ_wing_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CZ_wing = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_wing_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_wing_lookup_table.values
+    )
     CZ_wing_padded = jnp.array([0.0, 0.0, CZ_wing])
     CZ_wing_padded_transformed = jnp.dot(wing_transform, CZ_wing_padded * CZ_Scale)
 
     # Wing Damp p
-    CZ_wing_damp_p = mavrik_aero.CZ_wing_damp_p_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CZ_wing_damp_p = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_wing_damp_p_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_wing_damp_p_lookup_table.values
+    )
     CZ_wing_damp_p_padded = jnp.array([0.0, 0.0, CZ_wing_damp_p])
     CZ_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_p_padded * CZ_Scale_p)
 
     # Wing Damp q
-    CZ_wing_damp_q = mavrik_aero.CZ_wing_damp_q_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CZ_wing_damp_q = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_wing_damp_q_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_wing_damp_q_lookup_table.values
+    )
     CZ_wing_damp_q_padded = jnp.array([0.0, 0.0, CZ_wing_damp_q])
     CZ_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_q_padded * CZ_Scale_q)
 
     # Wing Damp r
-    CZ_wing_damp_r = mavrik_aero.CZ_wing_damp_r_lookup_table(jnp.array([
-        u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
-    ]))
+    CZ_wing_damp_r = interpolate_nd(
+        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+        breakpoints=Cz_lookup_tables.CZ_wing_damp_r_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_wing_damp_r_lookup_table.values
+    )
     CZ_wing_damp_r_padded = jnp.array([0.0, 0.0, CZ_wing_damp_r])
     CZ_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_r_padded * CZ_Scale_r)
 
     # Hover Fuse
-    CZ_hover_fuse = mavrik_aero.CZ_hover_fuse_lookup_table(jnp.array([
-        u.U, u.alpha, u.beta
-    ]))
+    CZ_hover_fuse = interpolate_nd(
+        jnp.array([u.U, u.alpha, u.beta]),
+        breakpoints=Cz_lookup_tables.CZ_hover_fuse_lookup_table.breakpoints,
+        values=Cz_lookup_tables.CZ_hover_fuse_lookup_table.values
+    )
     CZ_hover_fuse_padded = jnp.array([0.0, 0.0, CZ_hover_fuse * CZ_Scale])
     
     F3_array = jnp.array([
