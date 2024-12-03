@@ -171,7 +171,10 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
         
     print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")
     
-    M1 = mavrik_aero.L(u)
+    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
+    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+
+    M1 = mavrik_aero.L(u, wing_transform, tail_transform)
     M1_array = jnp.array([M1.L, M1.M, M1.N])
     Cl_outputs_values_close = jnp.allclose(M1_array, expected_Cl_outputs_values, atol=0.0001)
     print("Cl_outputs_values_close???", Cl_outputs_values_close)
@@ -200,9 +203,6 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     if not jnp.allclose(Cl_Scale_r, expected_Cl_Scale_r_values, atol=0.0001):
         print(f"\n  Expected: {expected_Cl_Scale_r_values}\n  Got: {Cl_Scale_r}") 
    
-    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-
     print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=0.0001))
     if not jnp.allclose(wing_transform, expected_wind_transform, atol=0.0001):
         print(f"\n  Expected: {expected_wind_transform}\n  Got: {wing_transform}")

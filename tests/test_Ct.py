@@ -35,7 +35,10 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, expected_Ct_outpu
         
     print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")
     
-    F0, M0 = mavrik_aero.Ct(u)
+    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
+    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+
+    F0, M0 = mavrik_aero.Ct(u, wing_transform, tail_transform)
     F0_array = jnp.array([F0.Fx, F0.Fy, F0.Fz])
     M0_array = jnp.array([M0.L, M0.M, M0.N])
     Ct_outputs_values = jnp.concatenate([F0_array, M0_array])

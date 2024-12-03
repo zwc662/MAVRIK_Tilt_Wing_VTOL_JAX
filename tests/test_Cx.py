@@ -192,8 +192,11 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
         
     
     print(f">>>>>>>>>>>>>>>>>>>> Test ID: {id} <<<<<<<<<<<<<<<<<<<<<<")
+      
+    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
+    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
     
-    F1 = mavrik_aero.Cx(u)
+    F1 = mavrik_aero.Cx(u, wing_transform, tail_transform)
     F1_array = jnp.array([F1.Fx, F1.Fy, F1.Fz])
     CX_outputs_values_close = jnp.allclose(F1_array, expected_CX_outputs_values, atol=0.0001)
     print("CX_outputs_values_close???", CX_outputs_values_close)
@@ -220,10 +223,7 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
     print("CX_Scale_r_close???", jnp.allclose(CX_Scale_r, expected_CX_Scale_r_values, atol=0.0001))
     if not jnp.allclose(CX_Scale_r, expected_CX_Scale_r_values, atol=0.0001):
         print(f"\n  Expected: {expected_CX_Scale_r_values}\n  Got: {CX_Scale_r}") 
-     
-    wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
-    tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
-    
+   
     '''
     print("wing_transform_close???", jnp.allclose(wing_transform, expected_wind_transform, atol=0.0001))
     if not jnp.allclose(wing_transform, expected_wind_transform, atol=0.0001):

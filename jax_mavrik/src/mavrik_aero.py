@@ -14,6 +14,10 @@ from jax import vmap
 
 from typing import Tuple, List 
 
+from multiprocessing import Pool
+import time
+
+
 @jit
 def linear_interpolate(v0, v1, weight):
     return v0 * (1 - weight) + v1 * weight
@@ -124,7 +128,42 @@ class MavrikAero:
         wing_transform = jnp.array([[jnp.cos(actuator_outputs.wing_tilt), 0, jnp.sin(actuator_outputs.wing_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.wing_tilt), 0., jnp.cos(actuator_outputs.wing_tilt)]]);
         tail_transform = jnp.array([[jnp.cos(actuator_outputs.tail_tilt), 0, jnp.sin(actuator_outputs.tail_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.tail_tilt), 0., jnp.cos(actuator_outputs.tail_tilt)]])
 
+        forces, moments, actuator_outputs = self.parallel_interpolate(actuator_outputs, wing_transform, tail_transform)
+        #forces, moments, actuator_outputs = self.interpolate(actuator_outputs, wing_transform, tail_transform)
+
+        return forces, moments, actuator_outputs
     
+    def parallel_interpolate(self, actuator_outputs: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Tuple[Forces, Moments, ActuatorOutput]: 
+        # Use a Pool to run functions in parallel
+        with Pool(processes=8) as pool:  # Use as many processes as cores available
+            results = pool.map(lambda f: f(actuator_outputs, wing_transform, tail_transform), 
+                               [self.Ct, self.Cx, self.Cy, self.Cz, self.L, self.M, self.N, self.Kq]
+                               )
+            F0, M0 = results[0]
+            F1 = results[1]
+            F2 = results[2]
+            F3 = results[3]
+            M1 = results[4]
+            M2 = results[5]
+            M3 = results[6]
+            M5 = results[7]
+            Fx = F0.Fx + F1.Fx + F2.Fx + F3.Fx
+            Fy = F0.Fy + F1.Fy + F2.Fy + F3.Fy
+            Fz = F0.Fz + F1.Fz + F2.Fz + F3.Fz
+
+            forces = Forces(Fx, Fy, Fz)
+            #moments_by_forces = jnp.cross(jnp.array([state.X, state.Y, state.Z]), jnp.array([forces.Fx, forces.Fy, forces.Fz]))
+            
+            moments = Moments(M0.L + M1.L + M2.L + M3.L + M5.L, # + moments_by_forces[0], 
+                            M0.M + M1.M + M2.M + M3.M + M5.M, # + moments_by_forces[1], 
+                            M0.N + M1.N + M2.N + M3.N + M5.N, # + moments_by_forces[2]
+                            )
+
+            return forces, moments, actuator_outputs
+        
+
+
+    def interpolate(self, actuator_outputs: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Tuple[Forces, Moments, ActuatorOutput]:
         F0, M0 = self.Ct(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F0._asdict().items():
