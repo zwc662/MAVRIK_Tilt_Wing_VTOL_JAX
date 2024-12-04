@@ -12,6 +12,7 @@ from jax_mavrik.src.sixdof import (
 from jax import jit
 
 from jax_mavrik.src.mavrik_aero import MavrikAero
+from jax_mavrik.src.mavrik_aero_parallel import MavrikAero_Parallel
 from jax_mavrik.mavrik_setup import MavrikSetup
 
 def wrap_to_pi(angle):

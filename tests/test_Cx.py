@@ -4,7 +4,7 @@ import pytest
 import os
 import sys
 
-from jax_mavrik.src.mavrik_aero import MavrikAero, Cx, interpolate_nd, CX_LOOKUP_TABLES, RPM_TRANSFORMS
+from jax_mavrik.src.mavrik_aero_parallel import MavrikAero, Cx, interpolate_nd, CX_LOOKUP_TABLES, RPM_TRANSFORMS
 
 from jax_mavrik.mavrik_setup import MavrikSetup
 from jax_mavrik.mavrik_types import StateVariables, ControlInputs, Forces
