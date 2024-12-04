@@ -4,7 +4,7 @@ import pytest
 import os
 import sys
 
-from jax_mavrik.src.mavrik_aero_parallel import (
+from jax_mavrik.src.mavrik_aero import (
     MavrikAero,
     Cx, Cy, Cz, L, M, N, Ct, Kq
 )
