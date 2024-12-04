@@ -217,113 +217,100 @@ def test_mavrik_aero(id, mavrik_aero, actuator_outputs_values, \
 
     Cl_aileron_wing = interpolate_nd(
         jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron]),
-        breakpoints=Cl_lookup_tables.Cl_aileron_wing_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_aileron_wing_lookup_table.values
+        Cl_lookup_tables.Cl_aileron_wing_lookup_table
     )
     Cl_aileron_wing_padded = jnp.array([Cl_aileron_wing, 0.0, 0.0])
     Cl_aileron_wing_padded_transformed = jnp.dot(wing_transform, Cl_aileron_wing_padded * Cl_Scale)
 
     Cl_elevator_tail = interpolate_nd(
-        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator]),
-        breakpoints=Cl_lookup_tables.Cl_elevator_tail_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_elevator_tail_lookup_table.values
+    jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator]),
+    Cl_lookup_tables.Cl_elevator_tail_lookup_table
     )
     Cl_elevator_tail_padded = jnp.array([Cl_elevator_tail, 0.0, 0.0])
     Cl_elevator_tail_padded_transformed = jnp.dot(tail_transform, Cl_elevator_tail_padded * Cl_Scale)
 
     Cl_flap_wing = interpolate_nd(
-        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap]),
-        breakpoints=Cl_lookup_tables.Cl_flap_wing_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_flap_wing_lookup_table.values
+    jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap]),
+    Cl_lookup_tables.Cl_flap_wing_lookup_table
     )
     Cl_flap_wing_padded = jnp.array([Cl_flap_wing, 0.0, 0.0])
     Cl_flap_wing_padded_transformed = jnp.dot(wing_transform, Cl_flap_wing_padded * Cl_Scale)
 
     Cl_rudder_tail = interpolate_nd(
-        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder]),
-        breakpoints=Cl_lookup_tables.Cl_rudder_tail_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_rudder_tail_lookup_table.values
+    jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder]),
+    Cl_lookup_tables.Cl_rudder_tail_lookup_table
     )
     Cl_rudder_tail_padded = jnp.array([Cl_rudder_tail, 0.0, 0.0])
     Cl_rudder_tail_padded_transformed = jnp.dot(tail_transform, Cl_rudder_tail_padded * Cl_Scale)
 
     # Tail
     Cl_tail = interpolate_nd(
-        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_tail_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_tail_lookup_table.values
+    jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+    Cl_lookup_tables.Cl_tail_lookup_table
     )
     Cl_tail_padded = jnp.array([Cl_tail, 0.0, 0.0])
     Cl_tail_padded_transformed = jnp.dot(tail_transform, Cl_tail_padded * Cl_Scale)
 
     # Tail Damp p
     Cl_tail_damp_p = interpolate_nd(
-        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_tail_damp_p_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_tail_damp_p_lookup_table.values
+    jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+    Cl_lookup_tables.Cl_tail_damp_p_lookup_table
     )
     Cl_tail_damp_p_padded = jnp.array([Cl_tail_damp_p, 0.0, 0.0])
     Cl_tail_damp_p_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_p_padded * Cl_Scale_p)
 
     # Tail Damp q
     Cl_tail_damp_q = interpolate_nd(
-        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_tail_damp_q_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_tail_damp_q_lookup_table.values
+    jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+    Cl_lookup_tables.Cl_tail_damp_q_lookup_table
     )
     Cl_tail_damp_q_padded = jnp.array([Cl_tail_damp_q, 0.0, 0.0])
     Cl_tail_damp_q_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_q_padded * Cl_Scale_q)
 
     # Tail Damp r
     Cl_tail_damp_r = interpolate_nd(
-        jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_tail_damp_r_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_tail_damp_r_lookup_table.values
+    jnp.array([u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta]),
+    Cl_lookup_tables.Cl_tail_damp_r_lookup_table
     )
     Cl_tail_damp_r_padded = jnp.array([Cl_tail_damp_r, 0.0, 0.0])
     Cl_tail_damp_r_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_r_padded * Cl_Scale_r)
 
     # Wing
     Cl_wing = interpolate_nd(
-        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_wing_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_wing_lookup_table.values
+    jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+    Cl_lookup_tables.Cl_wing_lookup_table
     )
     Cl_wing_padded = jnp.array([Cl_wing, 0.0, 0.0])
     Cl_wing_padded_transformed = jnp.dot(wing_transform, Cl_wing_padded * Cl_Scale)
 
     # Wing Damp p
     Cl_wing_damp_p = interpolate_nd(
-        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_wing_damp_p_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_wing_damp_p_lookup_table.values
+    jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+    Cl_lookup_tables.Cl_wing_damp_p_lookup_table
     )
     Cl_wing_damp_p_padded = jnp.array([Cl_wing_damp_p, 0.0, 0.0])
     Cl_wing_damp_p_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_p_padded * Cl_Scale_p)
 
     # Wing Damp q
     Cl_wing_damp_q = interpolate_nd(
-        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_wing_damp_q_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_wing_damp_q_lookup_table.values
+    jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+    Cl_lookup_tables.Cl_wing_damp_q_lookup_table
     )
     Cl_wing_damp_q_padded = jnp.array([Cl_wing_damp_q, 0.0, 0.0])
     Cl_wing_damp_q_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_q_padded * Cl_Scale_q)
 
     # Wing Damp r
     Cl_wing_damp_r = interpolate_nd(
-        jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
-        breakpoints=Cl_lookup_tables.Cl_wing_damp_r_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_wing_damp_r_lookup_table.values
+    jnp.array([u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta]),
+    Cl_lookup_tables.Cl_wing_damp_r_lookup_table
     )
     Cl_wing_damp_r_padded = jnp.array([Cl_wing_damp_r, 0.0, 0.0])
     Cl_wing_damp_r_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_r_padded * Cl_Scale_r)
 
     # Hover Fuse
     Cl_hover_fuse = interpolate_nd(
-        jnp.array([u.U, u.alpha, u.beta]),
-        breakpoints=Cl_lookup_tables.Cl_hover_fuse_lookup_table.breakpoints,
-        values=Cl_lookup_tables.Cl_hover_fuse_lookup_table.values
+    jnp.array([u.U, u.alpha, u.beta]),
+    Cl_lookup_tables.Cl_hover_fuse_lookup_table
     )
     Cl_hover_fuse_padded = jnp.array([Cl_hover_fuse * Cl_Scale, 0.0, 0.0])
 
