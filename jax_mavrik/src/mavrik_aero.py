@@ -8,9 +8,9 @@ from jax_mavrik.src.actuator import ActuatorInutState, ActuatorInput, ActuatorOu
 from jax_mavrik.src.utils.mat_tools import euler_to_dcm
 from jax_mavrik.src.utils.jax_types import FloatScalar
 
-import jax.numpy as jnp
-from jax import jit
-from jax import vmap
+import numpy as np
+ 
+ 
 
 from typing import Tuple, List 
 
@@ -20,76 +20,65 @@ import time
 import itertools
 
 
-@jit
-def linear_interpolate(v0, v1, weight):
-    return v0 * (1 - weight) + v1 * weight
-
-@jit
-def get_index_and_weight(value, breakpoints):
-    """
-    Finds the index and weight for interpolation along a single dimension.
-    """
-    idx = jnp.clip(jnp.searchsorted(breakpoints, value) - 1, 0, len(breakpoints) - 2)
-    weight = (value - breakpoints[idx]) / (breakpoints[idx + 1] - breakpoints[idx])
-    return idx, weight
-
-@jit
-def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: jnp.ndarray, corner_offsets: jnp.ndarray) -> float:
-    """
-    Perform n-dimensional interpolation using vectorized JAX operations.
-
-    Args:
-        inputs (jnp.ndarray): The input coordinates at which to interpolate.
-        breakpoints (list of jnp.ndarray): Each array contains the breakpoints for one dimension.
-        values (jnp.ndarray): The values at each grid point with shape matching the breakpoints.
-
-    Returns:
-        jnp.ndarray: Interpolated value.
-    """
-    ndim = len(breakpoints)
-    indices = []
-    weights = []
-
-    # Loop over each dimension instead of using vmap
-    for i in range(ndim):
-        idx, weight = get_index_and_weight(inputs[i], breakpoints[i])
-        indices.append(idx)
-        weights.append(weight)
-
-    indices = jnp.array(indices)
-    weights = jnp.array(weights)
-
-    # Generate corner indices for interpolation
-    #corner_indices = jnp.stack(jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"), axis=-1).reshape(-1, ndim)
-    #corner_indices = jnp.array(list(itertools.product([0, 1], repeat=ndim)), dtype=int)
-
-    # Function to compute interpolated values for each corner
-    def compute_corner_value(corner_offset):
-        corner_idx = indices + corner_offset
-        corner_value = values[tuple(corner_idx)]
-        corner_weight = jnp.prod(jnp.where(corner_offset, weights, 1 - weights))
-        return corner_value * corner_weight
-
-    # Vectorize computation across all corners
-    interpolated_values = vmap(compute_corner_value)(corner_offsets)
-
-    # Sum contributions from all corners
-    return jnp.sum(interpolated_values)
-
 class JaxNDInterpolator:
-    def __init__(self, breakpoints: List[jnp.ndarray], values: jnp.ndarray):
+    def __init__(self, breakpoints: List[np.ndarray], values: np.ndarray):
         ndim = len(breakpoints)
         breakpoints = breakpoints
         values = values
-        corner_offsets = jnp.stack(
-            jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"),
+        corner_offsets = np.stack(
+            np.meshgrid(*[np.array([0, 1]) for _ in range(ndim)], indexing="ij"),
             axis=-1
         ).reshape(-1, ndim)
         self.interpolator = ft.partial(interpolate_nd, breakpoints=breakpoints, values=values, corner_offsets = corner_offsets)
  
-    def __call__(self, inputs: jnp.ndarray) -> float:
+    def __call__(self, inputs: np.ndarray) -> float:
         # Use partial to create a JAX-compatible function with fixed breakpoints and values
         return self.interpolator(inputs)
+
+
+def linear_interpolate(v0, v1, weight):
+    return v0 * (1 - weight) + v1 * weight
+ 
+def get_index_and_weight(value, breakpoints):
+    """
+    Finds the index and weight for interpolation along a single dimension.
+    """
+    idx = np.clip(np.searchsorted(breakpoints, value) - 1, 0, len(breakpoints) - 2)
+    weight = (value - breakpoints[idx]) / (breakpoints[idx + 1] - breakpoints[idx])
+    return idx, weight
+ 
+def interpolate_nd(inputs: np.ndarray, breakpoints: List[np.ndarray], values: np.ndarray, corner_offsets: np.ndarray) -> np.ndarray:
+    """
+    Perform efficient multi-dimensional interpolation for a single input point.
+
+    Args:
+        inputs (np.ndarray): The input coordinates for interpolation.
+
+    Returns:
+        np.ndarray: Interpolated value.
+    """
+    # Compute base indices and weights for each dimension
+    idx_and_weights = np.array([
+        get_index_and_weight(inputs[i], breakpoints[i]) for i in range(len(breakpoints))
+    ])
+    indices = idx_and_weights[:, 0].astype(int)
+    weights = idx_and_weights[:, 1]
+
+    # Compute all corner indices
+    corner_indices = indices + corner_offsets
+    corner_indices = np.clip(corner_indices, 0, np.array(values.shape) - 1)
+
+    # Convert n-dimensional indices to flat indices
+    flat_corner_indices = np.ravel_multi_index(corner_indices.T, values.shape)
+
+    # Gather corner values
+    corner_values = values.flatten()[flat_corner_indices]
+
+    # Compute weights for all corners
+    corner_weights = np.prod(np.where(corner_offsets, weights, 1 - weights), axis=1)
+
+    # Sum weighted corner contributions
+    return np.sum(corner_values * corner_weights)
 
 class MavrikAero:
     def __init__(self, mavrik_setup: MavrikSetup):
@@ -102,18 +91,18 @@ class MavrikAero:
         
 
         # Body frame velocities
-        body_velocities = jnp.array([state.VXe, state.VYe, state.VZe])
+        body_velocities = np.array([state.VXe, state.VYe, state.VZe])
         #print(body_velocities)
         # Inertial frame velocities
         inertial_velocities = R @ body_velocities
         u, v, w = inertial_velocities
         #print(f"{inertial_velocities=} vs. {state.u=}, {state.v=}, {state.w=}")
-        #print(f"beta_from_inertial_velocity={jnp.arctan2(v, jnp.sqrt(u**2 + w**2))} vs. beta_from_state_vb={jnp.arctan2(state.v, jnp.sqrt(state.u**2 + state.w**2))}")
+        #print(f"beta_from_inertial_velocity={np.arctan2(v, np.sqrt(u**2 + w**2))} vs. beta_from_state_vb={np.arctan2(state.v, np.sqrt(state.u**2 + state.w**2))}")
 
         actuator_input_state = ActuatorInutState(
-            U = jnp.sqrt(u**2 + v**2 + w**2),
-            alpha = jnp.arctan2(w, u),
-            beta = jnp.arctan2(v, jnp.sqrt(u**2 + w**2)),
+            U = np.sqrt(u**2 + v**2 + w**2),
+            alpha = np.arctan2(w, u),
+            beta = np.arctan2(v, np.sqrt(u**2 + w**2)),
             p = state.p,
             q = state.q,
             r = state.r
@@ -133,8 +122,8 @@ class MavrikAero:
 
         actuator_outputs: ActuatorOutput = actuate(actuator_input_state, actuator_inputs)
         #print(f"{actuator_outputs=}")
-        wing_transform = jnp.array([[jnp.cos(actuator_outputs.wing_tilt), 0, jnp.sin(actuator_outputs.wing_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.wing_tilt), 0., jnp.cos(actuator_outputs.wing_tilt)]]);
-        tail_transform = jnp.array([[jnp.cos(actuator_outputs.tail_tilt), 0, jnp.sin(actuator_outputs.tail_tilt)], [0, 1, 0], [-jnp.sin(actuator_outputs.tail_tilt), 0., jnp.cos(actuator_outputs.tail_tilt)]])
+        wing_transform = np.array([[np.cos(actuator_outputs.wing_tilt), 0, np.sin(actuator_outputs.wing_tilt)], [0, 1, 0], [-np.sin(actuator_outputs.wing_tilt), 0., np.cos(actuator_outputs.wing_tilt)]]);
+        tail_transform = np.array([[np.cos(actuator_outputs.tail_tilt), 0, np.sin(actuator_outputs.tail_tilt)], [0, 1, 0], [-np.sin(actuator_outputs.tail_tilt), 0., np.cos(actuator_outputs.tail_tilt)]])
 
         #forces, moments, actuator_outputs = self.parallel_interpolate(actuator_outputs, wing_transform, tail_transform)
         forces, moments, actuator_outputs = self.interpolate(actuator_outputs, wing_transform, tail_transform)
@@ -183,7 +172,7 @@ class MavrikAero:
             Fz = F0.Fz + F1.Fz + F2.Fz + F3.Fz
 
             forces = Forces(Fx, Fy, Fz)
-            #moments_by_forces = jnp.cross(jnp.array([state.X, state.Y, state.Z]), jnp.array([forces.Fx, forces.Fy, forces.Fz]))
+            #moments_by_forces = np.cross(np.array([state.X, state.Y, state.Z]), np.array([forces.Fx, forces.Fy, forces.Fz]))
             
             moments = Moments(M0.L + M1.L + M2.L + M3.L + M5.L, # + moments_by_forces[0], 
                             M0.M + M1.M + M2.M + M3.M + M5.M, # + moments_by_forces[1], 
@@ -198,53 +187,53 @@ class MavrikAero:
         F0, M0 = self.Ct(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F0._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
             
         for key, value in M0._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
         F1 = self.Cx(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F1._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         ''' 
         F2 = self.Cy(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F2._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
         F3 = self.Cz(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in F3._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
         M1 = self.L(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M1._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
         M2 = self.M(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M2._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
         M3 = self.N(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M3._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
         M5 = self.Kq(actuator_outputs, wing_transform, tail_transform)
         '''
         for key, value in M5._asdict().items():
-            if jnp.isnan(value).any():
+            if np.isnan(value).any():
                 raise ValueError(f"NaN detected in actuator outputs {key=}: {value}")
         '''
         Fx = F0.Fx + F1.Fx + F2.Fx + F3.Fx
@@ -252,7 +241,7 @@ class MavrikAero:
         Fz = F0.Fz + F1.Fz + F2.Fz + F3.Fz
 
         forces = Forces(Fx, Fy, Fz)
-        #moments_by_forces = jnp.cross(jnp.array([state.X, state.Y, state.Z]), jnp.array([forces.Fx, forces.Fy, forces.Fz]))
+        #moments_by_forces = np.cross(np.array([state.X, state.Y, state.Z]), np.array([forces.Fx, forces.Fy, forces.Fz]))
         
         moments = Moments(M0.L + M1.L + M2.L + M3.L + M5.L, # + moments_by_forces[0], 
                           M0.M + M1.M + M2.M + M3.M + M5.M, # + moments_by_forces[1], 
@@ -334,91 +323,91 @@ class MavrikAero:
         CX_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
         CX_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
-        CX_aileron_wing = self.CX_aileron_wing_lookup_table(jnp.array([
+        CX_aileron_wing = self.CX_aileron_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
-        CX_aileron_wing_padded = jnp.array([CX_aileron_wing, 0.0, 0.0])
-        CX_aileron_wing_padded_transformed = jnp.dot(wing_transform, CX_aileron_wing_padded * CX_Scale)
+        CX_aileron_wing_padded = np.array([CX_aileron_wing, 0.0, 0.0])
+        CX_aileron_wing_padded_transformed = np.dot(wing_transform, CX_aileron_wing_padded * CX_Scale)
          
-        CX_elevator_tail = self.CX_elevator_tail_lookup_table(jnp.array([
+        CX_elevator_tail = self.CX_elevator_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
         ]))
-        CX_elevator_tail_padded = jnp.array([CX_elevator_tail, 0.0, 0.0])
-        CX_elevator_tail_padded_transformed = jnp.dot(tail_transform, CX_elevator_tail_padded * CX_Scale)
+        CX_elevator_tail_padded = np.array([CX_elevator_tail, 0.0, 0.0])
+        CX_elevator_tail_padded_transformed = np.dot(tail_transform, CX_elevator_tail_padded * CX_Scale)
 
-        CX_flap_wing = self.CX_flap_wing_lookup_table(jnp.array([
+        CX_flap_wing = self.CX_flap_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
         ]))
-        CX_flap_wing_padded = jnp.array([CX_flap_wing, 0.0, 0.0])
-        CX_flap_wing_padded_transformed = jnp.dot(wing_transform, CX_flap_wing_padded * CX_Scale)
+        CX_flap_wing_padded = np.array([CX_flap_wing, 0.0, 0.0])
+        CX_flap_wing_padded_transformed = np.dot(wing_transform, CX_flap_wing_padded * CX_Scale)
 
-        CX_rudder_tail = self.CX_rudder_tail_lookup_table(jnp.array([
+        CX_rudder_tail = self.CX_rudder_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
         ]))
-        CX_rudder_tail_padded = jnp.array([CX_rudder_tail, 0.0, 0.0])
-        CX_rudder_tail_padded_transformed = jnp.dot(tail_transform, CX_rudder_tail_padded * CX_Scale)
+        CX_rudder_tail_padded = np.array([CX_rudder_tail, 0.0, 0.0])
+        CX_rudder_tail_padded_transformed = np.dot(tail_transform, CX_rudder_tail_padded * CX_Scale)
 
         # Tail
-        CX_tail = self.CX_tail_lookup_table(jnp.array([
+        CX_tail = self.CX_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CX_tail_padded = jnp.array([CX_tail, 0.0, 0.0])
-        CX_tail_padded_transformed = jnp.dot(tail_transform, CX_tail_padded * CX_Scale)
+        CX_tail_padded = np.array([CX_tail, 0.0, 0.0])
+        CX_tail_padded_transformed = np.dot(tail_transform, CX_tail_padded * CX_Scale)
 
         # Tail Damp p
-        CX_tail_damp_p = self.CX_tail_damp_p_lookup_table(jnp.array([
+        CX_tail_damp_p = self.CX_tail_damp_p_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ])) 
-        CX_tail_damp_p_padded = jnp.array([CX_tail_damp_p, 0.0, 0.0])
-        CX_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CX_tail_damp_p_padded * CX_Scale_p)
+        CX_tail_damp_p_padded = np.array([CX_tail_damp_p, 0.0, 0.0])
+        CX_tail_damp_p_padded_transformed = np.dot(tail_transform, CX_tail_damp_p_padded * CX_Scale_p)
 
         # Tail Damp q
-        CX_tail_damp_q = self.CX_tail_damp_q_lookup_table(jnp.array([
+        CX_tail_damp_q = self.CX_tail_damp_q_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CX_tail_damp_q_padded = jnp.array([CX_tail_damp_q, 0.0, 0.0])
-        CX_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CX_tail_damp_q_padded * CX_Scale_q)
+        CX_tail_damp_q_padded = np.array([CX_tail_damp_q, 0.0, 0.0])
+        CX_tail_damp_q_padded_transformed = np.dot(tail_transform, CX_tail_damp_q_padded * CX_Scale_q)
 
         # Tail Damp r
-        CX_tail_damp_r = self.CX_tail_damp_r_lookup_table(jnp.array([
+        CX_tail_damp_r = self.CX_tail_damp_r_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CX_tail_damp_r_padded = jnp.array([CX_tail_damp_r, 0.0, 0.0])
-        CX_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CX_tail_damp_r_padded * CX_Scale_r)
+        CX_tail_damp_r_padded = np.array([CX_tail_damp_r, 0.0, 0.0])
+        CX_tail_damp_r_padded_transformed = np.dot(tail_transform, CX_tail_damp_r_padded * CX_Scale_r)
 
         # Wing
-        CX_wing = self.CX_wing_lookup_table(jnp.array([
+        CX_wing = self.CX_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CX_wing_padded = jnp.array([CX_wing, 0.0, 0.0])
-        CX_wing_padded_transformed = jnp.dot(wing_transform, CX_wing_padded * CX_Scale)
+        CX_wing_padded = np.array([CX_wing, 0.0, 0.0])
+        CX_wing_padded_transformed = np.dot(wing_transform, CX_wing_padded * CX_Scale)
 
         # Wing Damp p
-        CX_wing_damp_p = self.CX_wing_damp_p_lookup_table(jnp.array([
+        CX_wing_damp_p = self.CX_wing_damp_p_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CX_wing_damp_p_padded = jnp.array([CX_wing_damp_p, 0.0, 0.0])
-        CX_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CX_wing_damp_p_padded * CX_Scale_p)
+        CX_wing_damp_p_padded = np.array([CX_wing_damp_p, 0.0, 0.0])
+        CX_wing_damp_p_padded_transformed = np.dot(wing_transform, CX_wing_damp_p_padded * CX_Scale_p)
 
         # Wing Damp q
-        CX_wing_damp_q = self.CX_wing_damp_q_lookup_table(jnp.array([
+        CX_wing_damp_q = self.CX_wing_damp_q_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CX_wing_damp_q_padded = jnp.array([CX_wing_damp_q, 0.0, 0.0])
-        CX_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CX_wing_damp_q_padded * CX_Scale_q)
+        CX_wing_damp_q_padded = np.array([CX_wing_damp_q, 0.0, 0.0])
+        CX_wing_damp_q_padded_transformed = np.dot(wing_transform, CX_wing_damp_q_padded * CX_Scale_q)
 
         # Wing Damp r
-        CX_wing_damp_r = self.CX_wing_damp_r_lookup_table(jnp.array([
+        CX_wing_damp_r = self.CX_wing_damp_r_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CX_wing_damp_r_padded = jnp.array([CX_wing_damp_r, 0.0, 0.0])
-        CX_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CX_wing_damp_r_padded * CX_Scale_r)
+        CX_wing_damp_r_padded = np.array([CX_wing_damp_r, 0.0, 0.0])
+        CX_wing_damp_r_padded_transformed = np.dot(wing_transform, CX_wing_damp_r_padded * CX_Scale_r)
 
         # Hover Fuse
-        CX_hover_fuse = self.CX_hover_fuse_lookup_table(jnp.array([
+        CX_hover_fuse = self.CX_hover_fuse_lookup_table(np.array([
             u.U, u.alpha, u.beta
         ]))
-        CX_hover_fuse_padded = jnp.array([CX_hover_fuse * CX_Scale, 0.0, 0.0])
+        CX_hover_fuse_padded = np.array([CX_hover_fuse * CX_Scale, 0.0, 0.0])
 
         return Forces(
             CX_aileron_wing_padded_transformed[0] + CX_elevator_tail_padded_transformed[0] + CX_flap_wing_padded_transformed[0] + CX_rudder_tail_padded_transformed[0] +
@@ -495,94 +484,94 @@ class MavrikAero:
         CY_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
         CY_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
 
-        wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin( u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]]);
-        tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+        wing_transform = np.array([[np.cos(u.wing_tilt), 0, np.sin( u.wing_tilt)], [0, 1, 0], [-np.sin(u.wing_tilt), 0., np.cos(u.wing_tilt)]]);
+        tail_transform = np.array([[np.cos(u.tail_tilt), 0, np.sin(u.tail_tilt)], [0, 1, 0], [-np.sin(u.tail_tilt), 0., np.cos(u.tail_tilt)]])
      
-        CY_aileron_wing = self.CY_aileron_wing_lookup_table(jnp.array([
+        CY_aileron_wing = self.CY_aileron_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
-        CY_aileron_wing_padded = jnp.array([0.0, CY_aileron_wing, 0.0])
-        CY_aileron_wing_padded_transformed = jnp.dot(wing_transform, CY_aileron_wing_padded * CY_Scale)    
+        CY_aileron_wing_padded = np.array([0.0, CY_aileron_wing, 0.0])
+        CY_aileron_wing_padded_transformed = np.dot(wing_transform, CY_aileron_wing_padded * CY_Scale)    
 
-        CY_elevator_tail = self.CY_elevator_tail_lookup_table(jnp.array([
+        CY_elevator_tail = self.CY_elevator_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
         ]))
-        CY_elevator_tail_padded = jnp.array([0.0, CY_elevator_tail, 0.0])
-        CY_elevator_tail_padded_transformed = jnp.dot(tail_transform, CY_elevator_tail_padded * CY_Scale)
+        CY_elevator_tail_padded = np.array([0.0, CY_elevator_tail, 0.0])
+        CY_elevator_tail_padded_transformed = np.dot(tail_transform, CY_elevator_tail_padded * CY_Scale)
 
-        CY_flap_wing = self.CY_flap_wing_lookup_table(jnp.array([
+        CY_flap_wing = self.CY_flap_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
         ]))
-        CY_flap_wing_padded = jnp.array([0.0, CY_flap_wing, 0.0])
-        CY_flap_wing_padded_transformed = jnp.dot(wing_transform, CY_flap_wing_padded * CY_Scale)
+        CY_flap_wing_padded = np.array([0.0, CY_flap_wing, 0.0])
+        CY_flap_wing_padded_transformed = np.dot(wing_transform, CY_flap_wing_padded * CY_Scale)
 
-        CY_rudder_tail = self.CY_rudder_tail_lookup_table(jnp.array([
+        CY_rudder_tail = self.CY_rudder_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
         ]))
-        CY_rudder_tail_padded = jnp.array([0.0, CY_rudder_tail, 0.0])
-        CY_rudder_tail_padded_transformed = jnp.dot(tail_transform, CY_rudder_tail_padded * CY_Scale)
+        CY_rudder_tail_padded = np.array([0.0, CY_rudder_tail, 0.0])
+        CY_rudder_tail_padded_transformed = np.dot(tail_transform, CY_rudder_tail_padded * CY_Scale)
 
         # Tail
-        CY_tail = self.CY_tail_lookup_table(jnp.array([
+        CY_tail = self.CY_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CY_tail_padded = jnp.array([0.0, CY_tail, 0.0])
-        CY_tail_padded_transformed = jnp.dot(tail_transform, CY_tail_padded * CY_Scale)
+        CY_tail_padded = np.array([0.0, CY_tail, 0.0])
+        CY_tail_padded_transformed = np.dot(tail_transform, CY_tail_padded * CY_Scale)
 
         # Tail Damp p
-        CY_tail_damp_p = self.CY_tail_damp_p_lookup_table(jnp.array([
+        CY_tail_damp_p = self.CY_tail_damp_p_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ])) 
-        CY_tail_damp_p_padded = jnp.array([0.0, CY_tail_damp_p, 0.0])
-        CY_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_p_padded * CY_Scale_p)
+        CY_tail_damp_p_padded = np.array([0.0, CY_tail_damp_p, 0.0])
+        CY_tail_damp_p_padded_transformed = np.dot(tail_transform, CY_tail_damp_p_padded * CY_Scale_p)
 
         # Tail Damp q
-        CY_tail_damp_q = self.CY_tail_damp_q_lookup_table(jnp.array([
+        CY_tail_damp_q = self.CY_tail_damp_q_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CY_tail_damp_q_padded = jnp.array([0.0, CY_tail_damp_q, 0.0])
-        CY_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_q_padded * CY_Scale_q)
+        CY_tail_damp_q_padded = np.array([0.0, CY_tail_damp_q, 0.0])
+        CY_tail_damp_q_padded_transformed = np.dot(tail_transform, CY_tail_damp_q_padded * CY_Scale_q)
 
         # Tail Damp r
-        CY_tail_damp_r = self.CY_tail_damp_r_lookup_table(jnp.array([
+        CY_tail_damp_r = self.CY_tail_damp_r_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CY_tail_damp_r_padded = jnp.array([0.0, CY_tail_damp_r, 0.0])
-        CY_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CY_tail_damp_r_padded * CY_Scale_r)
+        CY_tail_damp_r_padded = np.array([0.0, CY_tail_damp_r, 0.0])
+        CY_tail_damp_r_padded_transformed = np.dot(tail_transform, CY_tail_damp_r_padded * CY_Scale_r)
 
         # Wing
-        CY_wing = self.CY_wing_lookup_table(jnp.array([
+        CY_wing = self.CY_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CY_wing_padded = jnp.array([0.0, CY_wing, 0.0])
-        CY_wing_padded_transformed = jnp.dot(wing_transform, CY_wing_padded * CY_Scale)
+        CY_wing_padded = np.array([0.0, CY_wing, 0.0])
+        CY_wing_padded_transformed = np.dot(wing_transform, CY_wing_padded * CY_Scale)
 
         # Wing Damp p
-        CY_wing_damp_p = self.CY_wing_damp_p_lookup_table(jnp.array([
+        CY_wing_damp_p = self.CY_wing_damp_p_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CY_wing_damp_p_padded = jnp.array([0.0, CY_wing_damp_p, 0.0])
-        CY_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_p_padded * CY_Scale_p)
+        CY_wing_damp_p_padded = np.array([0.0, CY_wing_damp_p, 0.0])
+        CY_wing_damp_p_padded_transformed = np.dot(wing_transform, CY_wing_damp_p_padded * CY_Scale_p)
 
         # Wing Damp q
-        CY_wing_damp_q = self.CY_wing_damp_q_lookup_table(jnp.array([
+        CY_wing_damp_q = self.CY_wing_damp_q_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CY_wing_damp_q_padded = jnp.array([0.0, CY_wing_damp_q, 0.0])
-        CY_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_q_padded * CY_Scale_q)
+        CY_wing_damp_q_padded = np.array([0.0, CY_wing_damp_q, 0.0])
+        CY_wing_damp_q_padded_transformed = np.dot(wing_transform, CY_wing_damp_q_padded * CY_Scale_q)
 
         # Wing Damp r
-        CY_wing_damp_r = self.CY_wing_damp_r_lookup_table(jnp.array([
+        CY_wing_damp_r = self.CY_wing_damp_r_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CY_wing_damp_r_padded = jnp.array([0.0, CY_wing_damp_r, 0.0])
-        CY_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CY_wing_damp_r_padded * CY_Scale_r)
+        CY_wing_damp_r_padded = np.array([0.0, CY_wing_damp_r, 0.0])
+        CY_wing_damp_r_padded_transformed = np.dot(wing_transform, CY_wing_damp_r_padded * CY_Scale_r)
 
         # Hover Fuse
-        CY_hover_fuse = self.CY_hover_fuse_lookup_table(jnp.array([
+        CY_hover_fuse = self.CY_hover_fuse_lookup_table(np.array([
             u.U, u.alpha, u.beta
         ]))
-        CY_hover_fuse_padded = jnp.array([0.0, CY_hover_fuse * CY_Scale, 0.0])
+        CY_hover_fuse_padded = np.array([0.0, CY_hover_fuse * CY_Scale, 0.0])
 
         return Forces(
             CY_aileron_wing_padded_transformed[0] + CY_elevator_tail_padded_transformed[0] + CY_flap_wing_padded_transformed[0] + CY_rudder_tail_padded_transformed[0] +
@@ -673,96 +662,96 @@ class MavrikAero:
         CZ_Scale_p = 0.5744 * 2.8270 * 1.225 * 0.25 * u.U * u.p
         CZ_Scale_q = 0.5744 * 0.2032 * 1.225 * 0.25 * u.U * u.q
             
-        #wing_transform = jnp.array([[jnp.cos(u.wing_tilt), 0, jnp.sin(u.wing_tilt)], [0, 1, 0], [-jnp.sin(u.wing_tilt), 0., jnp.cos(u.wing_tilt)]])
-        #tail_transform = jnp.array([[jnp.cos(u.tail_tilt), 0, jnp.sin(u.tail_tilt)], [0, 1, 0], [-jnp.sin(u.tail_tilt), 0., jnp.cos(u.tail_tilt)]])
+        #wing_transform = np.array([[np.cos(u.wing_tilt), 0, np.sin(u.wing_tilt)], [0, 1, 0], [-np.sin(u.wing_tilt), 0., np.cos(u.wing_tilt)]])
+        #tail_transform = np.array([[np.cos(u.tail_tilt), 0, np.sin(u.tail_tilt)], [0, 1, 0], [-np.sin(u.tail_tilt), 0., np.cos(u.tail_tilt)]])
 
          
-        CZ_aileron_wing = self.CZ_aileron_wing_lookup_table(jnp.array([
+        CZ_aileron_wing = self.CZ_aileron_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
-        CZ_aileron_wing_padded = jnp.array([0.0, 0.0, CZ_aileron_wing])
-        CZ_aileron_wing_padded_transformed = jnp.dot(wing_transform, CZ_aileron_wing_padded * CZ_Scale)
+        CZ_aileron_wing_padded = np.array([0.0, 0.0, CZ_aileron_wing])
+        CZ_aileron_wing_padded_transformed = np.dot(wing_transform, CZ_aileron_wing_padded * CZ_Scale)
 
-        CZ_elevator_tail = self.CZ_elevator_tail_lookup_table(jnp.array([
+        CZ_elevator_tail = self.CZ_elevator_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
         ]))
-        CZ_elevator_tail_padded = jnp.array([0.0, 0.0, CZ_elevator_tail])
-        CZ_elevator_tail_padded_transformed = jnp.dot(tail_transform, CZ_elevator_tail_padded * CZ_Scale)
+        CZ_elevator_tail_padded = np.array([0.0, 0.0, CZ_elevator_tail])
+        CZ_elevator_tail_padded_transformed = np.dot(tail_transform, CZ_elevator_tail_padded * CZ_Scale)
 
         
-        CZ_flap_wing = self.CZ_flap_wing_lookup_table(jnp.array([
+        CZ_flap_wing = self.CZ_flap_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
         ]))
-        CZ_flap_wing_padded = jnp.array([0.0, 0.0, CZ_flap_wing])
-        CZ_flap_wing_padded_transformed = jnp.dot(wing_transform, CZ_flap_wing_padded * CZ_Scale)
+        CZ_flap_wing_padded = np.array([0.0, 0.0, CZ_flap_wing])
+        CZ_flap_wing_padded_transformed = np.dot(wing_transform, CZ_flap_wing_padded * CZ_Scale)
 
-        CZ_rudder_tail = self.CZ_rudder_tail_lookup_table(jnp.array([
+        CZ_rudder_tail = self.CZ_rudder_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
         ]))
-        CZ_rudder_tail_padded = jnp.array([0.0, 0.0, CZ_rudder_tail])
-        CZ_rudder_tail_padded_transformed = jnp.dot(tail_transform, CZ_rudder_tail_padded * CZ_Scale)
+        CZ_rudder_tail_padded = np.array([0.0, 0.0, CZ_rudder_tail])
+        CZ_rudder_tail_padded_transformed = np.dot(tail_transform, CZ_rudder_tail_padded * CZ_Scale)
 
         # Tail
-        CZ_tail = self.CZ_tail_lookup_table(jnp.array([
+        CZ_tail = self.CZ_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CZ_tail_padded = jnp.array([0.0, 0.0, CZ_tail])
-        CZ_tail_padded_transformed = jnp.dot(tail_transform, CZ_tail_padded * CZ_Scale)
+        CZ_tail_padded = np.array([0.0, 0.0, CZ_tail])
+        CZ_tail_padded_transformed = np.dot(tail_transform, CZ_tail_padded * CZ_Scale)
 
         # Tail Damp p
-        CZ_tail_damp_p = self.CZ_tail_damp_p_lookup_table(jnp.array([
+        CZ_tail_damp_p = self.CZ_tail_damp_p_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CZ_tail_damp_p_padded = jnp.array([0.0, 0.0, CZ_tail_damp_p])
-        CZ_tail_damp_p_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_p_padded * CZ_Scale_p)
+        CZ_tail_damp_p_padded = np.array([0.0, 0.0, CZ_tail_damp_p])
+        CZ_tail_damp_p_padded_transformed = np.dot(tail_transform, CZ_tail_damp_p_padded * CZ_Scale_p)
 
         # Tail Damp q
-        CZ_tail_damp_q = self.CZ_tail_damp_q_lookup_table(jnp.array([
+        CZ_tail_damp_q = self.CZ_tail_damp_q_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CZ_tail_damp_q_padded = jnp.array([0.0, 0.0, CZ_tail_damp_q])
-        CZ_tail_damp_q_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_q_padded * CZ_Scale_q)
+        CZ_tail_damp_q_padded = np.array([0.0, 0.0, CZ_tail_damp_q])
+        CZ_tail_damp_q_padded_transformed = np.dot(tail_transform, CZ_tail_damp_q_padded * CZ_Scale_q)
 
         # Tail Damp r
-        CZ_tail_damp_r = self.CZ_tail_damp_r_lookup_table(jnp.array([
+        CZ_tail_damp_r = self.CZ_tail_damp_r_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        CZ_tail_damp_r_padded = jnp.array([0.0, 0.0, CZ_tail_damp_r])
-        CZ_tail_damp_r_padded_transformed = jnp.dot(tail_transform, CZ_tail_damp_r_padded * CZ_Scale_r)
+        CZ_tail_damp_r_padded = np.array([0.0, 0.0, CZ_tail_damp_r])
+        CZ_tail_damp_r_padded_transformed = np.dot(tail_transform, CZ_tail_damp_r_padded * CZ_Scale_r)
 
         # Wing
-        CZ_wing = self.CZ_wing_lookup_table(jnp.array([
+        CZ_wing = self.CZ_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CZ_wing_padded = jnp.array([0.0, 0.0, CZ_wing])
-        CZ_wing_padded_transformed = jnp.dot(wing_transform, CZ_wing_padded * CZ_Scale)
+        CZ_wing_padded = np.array([0.0, 0.0, CZ_wing])
+        CZ_wing_padded_transformed = np.dot(wing_transform, CZ_wing_padded * CZ_Scale)
 
         # Wing Damp p
-        CZ_wing_damp_p = self.CZ_wing_damp_p_lookup_table(jnp.array([
+        CZ_wing_damp_p = self.CZ_wing_damp_p_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CZ_wing_damp_p_padded = jnp.array([0.0, 0.0, CZ_wing_damp_p])
-        CZ_wing_damp_p_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_p_padded * CZ_Scale_p)
+        CZ_wing_damp_p_padded = np.array([0.0, 0.0, CZ_wing_damp_p])
+        CZ_wing_damp_p_padded_transformed = np.dot(wing_transform, CZ_wing_damp_p_padded * CZ_Scale_p)
 
         # Wing Damp q
-        CZ_wing_damp_q = self.CZ_wing_damp_q_lookup_table(jnp.array([
+        CZ_wing_damp_q = self.CZ_wing_damp_q_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CZ_wing_damp_q_padded = jnp.array([0.0, 0.0, CZ_wing_damp_q])
-        CZ_wing_damp_q_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_q_padded * CZ_Scale_q)
+        CZ_wing_damp_q_padded = np.array([0.0, 0.0, CZ_wing_damp_q])
+        CZ_wing_damp_q_padded_transformed = np.dot(wing_transform, CZ_wing_damp_q_padded * CZ_Scale_q)
 
         # Wing Damp r
-        CZ_wing_damp_r = self.CZ_wing_damp_r_lookup_table(jnp.array([
+        CZ_wing_damp_r = self.CZ_wing_damp_r_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        CZ_wing_damp_r_padded = jnp.array([0.0, 0.0, CZ_wing_damp_r])
-        CZ_wing_damp_r_padded_transformed = jnp.dot(wing_transform, CZ_wing_damp_r_padded * CZ_Scale_r)
+        CZ_wing_damp_r_padded = np.array([0.0, 0.0, CZ_wing_damp_r])
+        CZ_wing_damp_r_padded_transformed = np.dot(wing_transform, CZ_wing_damp_r_padded * CZ_Scale_r)
 
         # Hover Fuse
-        CZ_hover_fuse = self.CZ_hover_fuse_lookup_table(jnp.array([
+        CZ_hover_fuse = self.CZ_hover_fuse_lookup_table(np.array([
             u.U, u.alpha, u.beta
         ]))
-        CZ_hover_fuse_padded = jnp.array([0.0, 0.0, CZ_hover_fuse * CZ_Scale])
+        CZ_hover_fuse_padded = np.array([0.0, 0.0, CZ_hover_fuse * CZ_Scale])
 
         return Forces(
             CZ_aileron_wing_padded_transformed[0] + CZ_elevator_tail_padded_transformed[0] + CZ_flap_wing_padded_transformed[0] + CZ_rudder_tail_padded_transformed[0] +
@@ -840,92 +829,92 @@ class MavrikAero:
         Cl_Scale_q = 0.5744 * 2.8270 * 0.2032 * 1.225 * 0.25 * u.U * u.q
         Cl_Scale_r = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.r
  
-        Cl_aileron_wing = self.Cl_aileron_wing_lookup_table(jnp.array([
+        Cl_aileron_wing = self.Cl_aileron_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
-        Cl_aileron_wing_padded = jnp.array([Cl_aileron_wing, 0.0, 0.0])
-        Cl_aileron_wing_padded_transformed = jnp.dot(wing_transform, Cl_aileron_wing_padded * Cl_Scale)
+        Cl_aileron_wing_padded = np.array([Cl_aileron_wing, 0.0, 0.0])
+        Cl_aileron_wing_padded_transformed = np.dot(wing_transform, Cl_aileron_wing_padded * Cl_Scale)
 
       
-        Cl_elevator_tail = self.Cl_elevator_tail_lookup_table(jnp.array([
+        Cl_elevator_tail = self.Cl_elevator_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
         ]))
-        Cl_elevator_tail_padded = jnp.array([Cl_elevator_tail, 0.0, 0.0])
-        Cl_elevator_tail_padded_transformed = jnp.dot(tail_transform, Cl_elevator_tail_padded * Cl_Scale)
+        Cl_elevator_tail_padded = np.array([Cl_elevator_tail, 0.0, 0.0])
+        Cl_elevator_tail_padded_transformed = np.dot(tail_transform, Cl_elevator_tail_padded * Cl_Scale)
 
-        Cl_flap_wing = self.Cl_flap_wing_lookup_table(jnp.array([
+        Cl_flap_wing = self.Cl_flap_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
         ]))
-        Cl_flap_wing_padded = jnp.array([Cl_flap_wing, 0.0, 0.0])
-        Cl_flap_wing_padded_transformed = jnp.dot(wing_transform, Cl_flap_wing_padded * Cl_Scale)
+        Cl_flap_wing_padded = np.array([Cl_flap_wing, 0.0, 0.0])
+        Cl_flap_wing_padded_transformed = np.dot(wing_transform, Cl_flap_wing_padded * Cl_Scale)
 
-        Cl_rudder_tail = self.Cl_rudder_tail_lookup_table(jnp.array([
+        Cl_rudder_tail = self.Cl_rudder_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
         ]))
-        Cl_rudder_tail_padded = jnp.array([Cl_rudder_tail, 0.0, 0.0])
-        Cl_rudder_tail_padded_transformed = jnp.dot(tail_transform, Cl_rudder_tail_padded * Cl_Scale)
+        Cl_rudder_tail_padded = np.array([Cl_rudder_tail, 0.0, 0.0])
+        Cl_rudder_tail_padded_transformed = np.dot(tail_transform, Cl_rudder_tail_padded * Cl_Scale)
 
         # Tail
-        Cl_tail = self.Cl_tail_lookup_table(jnp.array([
+        Cl_tail = self.Cl_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cl_tail_padded = jnp.array([Cl_tail, 0.0, 0.0])
-        Cl_tail_padded_transformed = jnp.dot(tail_transform, Cl_tail_padded * Cl_Scale)
+        Cl_tail_padded = np.array([Cl_tail, 0.0, 0.0])
+        Cl_tail_padded_transformed = np.dot(tail_transform, Cl_tail_padded * Cl_Scale)
 
         # Tail Damp p
-        Cl_tail_damp_p = self.Cl_tail_damp_p_lookup_table(jnp.array([
+        Cl_tail_damp_p = self.Cl_tail_damp_p_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cl_tail_damp_p_padded = jnp.array([Cl_tail_damp_p, 0.0, 0.0])
-        Cl_tail_damp_p_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_p_padded * Cl_Scale_p)
+        Cl_tail_damp_p_padded = np.array([Cl_tail_damp_p, 0.0, 0.0])
+        Cl_tail_damp_p_padded_transformed = np.dot(tail_transform, Cl_tail_damp_p_padded * Cl_Scale_p)
 
         # Tail Damp q
-        Cl_tail_damp_q = self.Cl_tail_damp_q_lookup_table(jnp.array([
+        Cl_tail_damp_q = self.Cl_tail_damp_q_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cl_tail_damp_q_padded = jnp.array([Cl_tail_damp_q, 0.0, 0.0])
-        Cl_tail_damp_q_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_q_padded * Cl_Scale_q)
+        Cl_tail_damp_q_padded = np.array([Cl_tail_damp_q, 0.0, 0.0])
+        Cl_tail_damp_q_padded_transformed = np.dot(tail_transform, Cl_tail_damp_q_padded * Cl_Scale_q)
 
         # Tail Damp r
-        Cl_tail_damp_r = self.Cl_tail_damp_r_lookup_table(jnp.array([
+        Cl_tail_damp_r = self.Cl_tail_damp_r_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cl_tail_damp_r_padded = jnp.array([Cl_tail_damp_r, 0.0, 0.0])
-        Cl_tail_damp_r_padded_transformed = jnp.dot(tail_transform, Cl_tail_damp_r_padded * Cl_Scale_r)
+        Cl_tail_damp_r_padded = np.array([Cl_tail_damp_r, 0.0, 0.0])
+        Cl_tail_damp_r_padded_transformed = np.dot(tail_transform, Cl_tail_damp_r_padded * Cl_Scale_r)
 
         # Wing
-        Cl_wing = self.Cl_wing_lookup_table(jnp.array([
+        Cl_wing = self.Cl_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cl_wing_padded = jnp.array([Cl_wing, 0.0, 0.0])
-        Cl_wing_padded_transformed = jnp.dot(wing_transform, Cl_wing_padded * Cl_Scale)
+        Cl_wing_padded = np.array([Cl_wing, 0.0, 0.0])
+        Cl_wing_padded_transformed = np.dot(wing_transform, Cl_wing_padded * Cl_Scale)
 
         # Wing Damp p
-        Cl_wing_damp_p = self.Cl_wing_damp_p_lookup_table(jnp.array([
+        Cl_wing_damp_p = self.Cl_wing_damp_p_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cl_wing_damp_p_padded = jnp.array([Cl_wing_damp_p, 0.0, 0.0])
-        Cl_wing_damp_p_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_p_padded * Cl_Scale_p)
+        Cl_wing_damp_p_padded = np.array([Cl_wing_damp_p, 0.0, 0.0])
+        Cl_wing_damp_p_padded_transformed = np.dot(wing_transform, Cl_wing_damp_p_padded * Cl_Scale_p)
 
         # Wing Damp q
-        Cl_wing_damp_q = self.Cl_wing_damp_q_lookup_table(jnp.array([
+        Cl_wing_damp_q = self.Cl_wing_damp_q_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cl_wing_damp_q_padded = jnp.array([Cl_wing_damp_q, 0.0, 0.0])
-        Cl_wing_damp_q_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_q_padded * Cl_Scale_q)
+        Cl_wing_damp_q_padded = np.array([Cl_wing_damp_q, 0.0, 0.0])
+        Cl_wing_damp_q_padded_transformed = np.dot(wing_transform, Cl_wing_damp_q_padded * Cl_Scale_q)
 
         # Wing Damp r
-        Cl_wing_damp_r = self.Cl_wing_damp_r_lookup_table(jnp.array([
+        Cl_wing_damp_r = self.Cl_wing_damp_r_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cl_wing_damp_r_padded = jnp.array([Cl_wing_damp_r, 0.0, 0.0])
-        Cl_wing_damp_r_padded_transformed = jnp.dot(wing_transform, Cl_wing_damp_r_padded * Cl_Scale_r)
+        Cl_wing_damp_r_padded = np.array([Cl_wing_damp_r, 0.0, 0.0])
+        Cl_wing_damp_r_padded_transformed = np.dot(wing_transform, Cl_wing_damp_r_padded * Cl_Scale_r)
 
         # Hover Fuse
-        Cl_hover_fuse = self.Cl_hover_fuse_lookup_table(jnp.array([
+        Cl_hover_fuse = self.Cl_hover_fuse_lookup_table(np.array([
             u.U, u.alpha, u.beta
         ]))
-        Cl_hover_fuse_padded = jnp.array([Cl_hover_fuse * Cl_Scale, 0.0, 0.0])
+        Cl_hover_fuse_padded = np.array([Cl_hover_fuse * Cl_Scale, 0.0, 0.0])
 
         return Moments(
             Cl_aileron_wing_padded_transformed[0] + Cl_elevator_tail_padded_transformed[0] + Cl_flap_wing_padded_transformed[0] + Cl_rudder_tail_padded_transformed[0] +
@@ -1003,92 +992,92 @@ class MavrikAero:
         Cm_Scale_q = 0.5744 * 0.2032**2 * 1.225 * 0.25 * u.U * u.q
         Cm_Scale_r = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.r
  
-        Cm_aileron_wing = self.Cm_aileron_wing_lookup_table(jnp.array([
+        Cm_aileron_wing = self.Cm_aileron_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
-        Cm_aileron_wing_padded = jnp.array([0.0, Cm_aileron_wing, 0.0])
-        Cm_aileron_wing_padded_transformed = jnp.dot(wing_transform, Cm_aileron_wing_padded * Cm_Scale)
+        Cm_aileron_wing_padded = np.array([0.0, Cm_aileron_wing, 0.0])
+        Cm_aileron_wing_padded_transformed = np.dot(wing_transform, Cm_aileron_wing_padded * Cm_Scale)
 
-        Cm_elevator_tail = self.Cm_elevator_tail_lookup_table(jnp.array([
+        Cm_elevator_tail = self.Cm_elevator_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
         ]))
-        Cm_elevator_tail_padded = jnp.array([0.0, Cm_elevator_tail, 0.0])
-        Cm_elevator_tail_padded_transformed = jnp.dot(tail_transform, Cm_elevator_tail_padded * Cm_Scale)
+        Cm_elevator_tail_padded = np.array([0.0, Cm_elevator_tail, 0.0])
+        Cm_elevator_tail_padded_transformed = np.dot(tail_transform, Cm_elevator_tail_padded * Cm_Scale)
 
-        Cm_flap_wing = self.Cm_flap_wing_lookup_table(jnp.array([
+        Cm_flap_wing = self.Cm_flap_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
         ]))
-        Cm_flap_wing_padded = jnp.array([0.0, Cm_flap_wing, 0.0])
-        Cm_flap_wing_padded_transformed = jnp.dot(wing_transform, Cm_flap_wing_padded * Cm_Scale)
+        Cm_flap_wing_padded = np.array([0.0, Cm_flap_wing, 0.0])
+        Cm_flap_wing_padded_transformed = np.dot(wing_transform, Cm_flap_wing_padded * Cm_Scale)
 
-        Cm_rudder_tail = self.Cm_rudder_tail_lookup_table(jnp.array([
+        Cm_rudder_tail = self.Cm_rudder_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
         ]))
-        Cm_rudder_tail_padded = jnp.array([0.0, Cm_rudder_tail, 0.0])
-        Cm_rudder_tail_padded_transformed = jnp.dot(tail_transform, Cm_rudder_tail_padded * Cm_Scale)
+        Cm_rudder_tail_padded = np.array([0.0, Cm_rudder_tail, 0.0])
+        Cm_rudder_tail_padded_transformed = np.dot(tail_transform, Cm_rudder_tail_padded * Cm_Scale)
 
         # Tail
-        Cm_tail = self.Cm_tail_lookup_table(jnp.array([
+        Cm_tail = self.Cm_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cm_tail_padded = jnp.array([0.0, Cm_tail, 0.0])
-        Cm_tail_padded_transformed = jnp.dot(tail_transform, Cm_tail_padded * Cm_Scale)
+        Cm_tail_padded = np.array([0.0, Cm_tail, 0.0])
+        Cm_tail_padded_transformed = np.dot(tail_transform, Cm_tail_padded * Cm_Scale)
 
         # Tail Damp p
-        Cm_tail_damp_p = self.Cm_tail_damp_p_lookup_table(jnp.array([
+        Cm_tail_damp_p = self.Cm_tail_damp_p_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cm_tail_damp_p_padded = jnp.array([0.0, Cm_tail_damp_p, 0.0])
-        Cm_tail_damp_p_padded_transformed = jnp.dot(tail_transform, Cm_tail_damp_p_padded * Cm_Scale_p)
+        Cm_tail_damp_p_padded = np.array([0.0, Cm_tail_damp_p, 0.0])
+        Cm_tail_damp_p_padded_transformed = np.dot(tail_transform, Cm_tail_damp_p_padded * Cm_Scale_p)
 
         # Tail Damp q
-        Cm_tail_damp_q = self.Cm_tail_damp_q_lookup_table(jnp.array([
+        Cm_tail_damp_q = self.Cm_tail_damp_q_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cm_tail_damp_q_padded = jnp.array([0.0, Cm_tail_damp_q, 0.0])
-        Cm_tail_damp_q_padded_transformed = jnp.dot(tail_transform, Cm_tail_damp_q_padded * Cm_Scale_q)
+        Cm_tail_damp_q_padded = np.array([0.0, Cm_tail_damp_q, 0.0])
+        Cm_tail_damp_q_padded_transformed = np.dot(tail_transform, Cm_tail_damp_q_padded * Cm_Scale_q)
 
         # Tail Damp r
         # Tail Damp r
-        Cm_tail_damp_r = self.Cm_tail_damp_r_lookup_table(jnp.array([
+        Cm_tail_damp_r = self.Cm_tail_damp_r_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cm_tail_damp_r_padded = jnp.array([0.0, Cm_tail_damp_r, 0.0])
-        Cm_tail_damp_r_padded_transformed = jnp.dot(tail_transform, Cm_tail_damp_r_padded * Cm_Scale_r)
+        Cm_tail_damp_r_padded = np.array([0.0, Cm_tail_damp_r, 0.0])
+        Cm_tail_damp_r_padded_transformed = np.dot(tail_transform, Cm_tail_damp_r_padded * Cm_Scale_r)
 
         # Wing
-        Cm_wing = self.Cm_wing_lookup_table(jnp.array([
+        Cm_wing = self.Cm_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cm_wing_padded = jnp.array([0.0, Cm_wing, 0.0])
-        Cm_wing_padded_transformed = jnp.dot(wing_transform, Cm_wing_padded * Cm_Scale)
+        Cm_wing_padded = np.array([0.0, Cm_wing, 0.0])
+        Cm_wing_padded_transformed = np.dot(wing_transform, Cm_wing_padded * Cm_Scale)
 
         # Wing Damp p
-        Cm_wing_damp_p = self.Cm_wing_damp_p_lookup_table(jnp.array([
+        Cm_wing_damp_p = self.Cm_wing_damp_p_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cm_wing_damp_p_padded = jnp.array([0.0, Cm_wing_damp_p, 0.0])
-        Cm_wing_damp_p_padded_transformed = jnp.dot(wing_transform, Cm_wing_damp_p_padded * Cm_Scale_p)
+        Cm_wing_damp_p_padded = np.array([0.0, Cm_wing_damp_p, 0.0])
+        Cm_wing_damp_p_padded_transformed = np.dot(wing_transform, Cm_wing_damp_p_padded * Cm_Scale_p)
 
         # Wing Damp q
-        Cm_wing_damp_q = self.Cm_wing_damp_q_lookup_table(jnp.array([
+        Cm_wing_damp_q = self.Cm_wing_damp_q_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cm_wing_damp_q_padded = jnp.array([0.0, Cm_wing_damp_q, 0.0])
-        Cm_wing_damp_q_padded_transformed = jnp.dot(wing_transform, Cm_wing_damp_q_padded * Cm_Scale_q)
+        Cm_wing_damp_q_padded = np.array([0.0, Cm_wing_damp_q, 0.0])
+        Cm_wing_damp_q_padded_transformed = np.dot(wing_transform, Cm_wing_damp_q_padded * Cm_Scale_q)
 
         # Wing Damp r
-        Cm_wing_damp_r = self.Cm_wing_damp_r_lookup_table(jnp.array([
+        Cm_wing_damp_r = self.Cm_wing_damp_r_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cm_wing_damp_r_padded = jnp.array([0.0, Cm_wing_damp_r, 0.0])
-        Cm_wing_damp_r_padded_transformed = jnp.dot(wing_transform, Cm_wing_damp_r_padded * Cm_Scale_r)
+        Cm_wing_damp_r_padded = np.array([0.0, Cm_wing_damp_r, 0.0])
+        Cm_wing_damp_r_padded_transformed = np.dot(wing_transform, Cm_wing_damp_r_padded * Cm_Scale_r)
 
         # Hover Fuse
-        Cm_hover_fuse = self.Cm_hover_fuse_lookup_table(jnp.array([
+        Cm_hover_fuse = self.Cm_hover_fuse_lookup_table(np.array([
             u.U, u.alpha, u.beta
         ]))
-        Cm_hover_fuse_padded = jnp.array([0.0, Cm_hover_fuse * Cm_Scale, 0.0])
+        Cm_hover_fuse_padded = np.array([0.0, Cm_hover_fuse * Cm_Scale, 0.0])
           
 
         return Moments(
@@ -1167,90 +1156,90 @@ class MavrikAero:
         Cn_Scale_q = 0.5744 * 0.2032 * 2.8270 * 1.225 * 0.25 * u.U * u.q
         Cn_Scale_r = 0.5744 * 2.8270**2 * 1.225 * 0.25 * u.U * u.r
        
-        Cn_aileron_wing = self.Cn_aileron_wing_lookup_table(jnp.array([
+        Cn_aileron_wing = self.Cn_aileron_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.aileron
         ]))
-        Cn_aileron_wing_padded = jnp.array([0.0, 0.0, Cn_aileron_wing])
-        Cn_aileron_wing_padded_transformed = jnp.dot(wing_transform, Cn_aileron_wing_padded * Cn_Scale)
+        Cn_aileron_wing_padded = np.array([0.0, 0.0, Cn_aileron_wing])
+        Cn_aileron_wing_padded_transformed = np.dot(wing_transform, Cn_aileron_wing_padded * Cn_Scale)
 
-        Cn_elevator_tail = self.Cn_elevator_tail_lookup_table(jnp.array([
+        Cn_elevator_tail = self.Cn_elevator_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.elevator
         ]))
-        Cn_elevator_tail_padded = jnp.array([0.0, 0.0, Cn_elevator_tail])
-        Cn_elevator_tail_padded_transformed = jnp.dot(tail_transform, Cn_elevator_tail_padded * Cn_Scale)
+        Cn_elevator_tail_padded = np.array([0.0, 0.0, Cn_elevator_tail])
+        Cn_elevator_tail_padded_transformed = np.dot(tail_transform, Cn_elevator_tail_padded * Cn_Scale)
 
-        Cn_flap_wing = self.Cn_flap_wing_lookup_table(jnp.array([
+        Cn_flap_wing = self.Cn_flap_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta, u.flap
         ]))
-        Cn_flap_wing_padded = jnp.array([0.0, 0.0, Cn_flap_wing])
-        Cn_flap_wing_padded_transformed = jnp.dot(wing_transform, Cn_flap_wing_padded * Cn_Scale)
+        Cn_flap_wing_padded = np.array([0.0, 0.0, Cn_flap_wing])
+        Cn_flap_wing_padded_transformed = np.dot(wing_transform, Cn_flap_wing_padded * Cn_Scale)
 
-        Cn_rudder_tail = self.Cn_rudder_tail_lookup_table(jnp.array([
+        Cn_rudder_tail = self.Cn_rudder_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta, u.rudder
         ]))
-        Cn_rudder_tail_padded = jnp.array([0.0, 0.0, Cn_rudder_tail])
-        Cn_rudder_tail_padded_transformed = jnp.dot(tail_transform, Cn_rudder_tail_padded * Cn_Scale)
+        Cn_rudder_tail_padded = np.array([0.0, 0.0, Cn_rudder_tail])
+        Cn_rudder_tail_padded_transformed = np.dot(tail_transform, Cn_rudder_tail_padded * Cn_Scale)
         # Tail
-        Cn_tail = self.Cn_tail_lookup_table(jnp.array([
+        Cn_tail = self.Cn_tail_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cn_tail_padded = jnp.array([0.0, 0.0, Cn_tail])
-        Cn_tail_padded_transformed = jnp.dot(tail_transform, Cn_tail_padded * Cn_Scale)
+        Cn_tail_padded = np.array([0.0, 0.0, Cn_tail])
+        Cn_tail_padded_transformed = np.dot(tail_transform, Cn_tail_padded * Cn_Scale)
 
         # Tail Damp p
-        Cn_tail_damp_p = self.Cn_tail_damp_p_lookup_table(jnp.array([
+        Cn_tail_damp_p = self.Cn_tail_damp_p_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cn_tail_damp_p_padded = jnp.array([0.0, 0.0, Cn_tail_damp_p])
-        Cn_tail_damp_p_padded_transformed = jnp.dot(tail_transform, Cn_tail_damp_p_padded * Cn_Scale_p)
+        Cn_tail_damp_p_padded = np.array([0.0, 0.0, Cn_tail_damp_p])
+        Cn_tail_damp_p_padded_transformed = np.dot(tail_transform, Cn_tail_damp_p_padded * Cn_Scale_p)
 
         # Tail Damp q
-        Cn_tail_damp_q = self.Cn_tail_damp_q_lookup_table(jnp.array([
+        Cn_tail_damp_q = self.Cn_tail_damp_q_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cn_tail_damp_q_padded = jnp.array([0.0, 0.0, Cn_tail_damp_q])
-        Cn_tail_damp_q_padded_transformed = jnp.dot(tail_transform, Cn_tail_damp_q_padded * Cn_Scale_q)
+        Cn_tail_damp_q_padded = np.array([0.0, 0.0, Cn_tail_damp_q])
+        Cn_tail_damp_q_padded_transformed = np.dot(tail_transform, Cn_tail_damp_q_padded * Cn_Scale_q)
 
         # Tail Damp r
-        Cn_tail_damp_r = self.Cn_tail_damp_r_lookup_table(jnp.array([
+        Cn_tail_damp_r = self.Cn_tail_damp_r_lookup_table(np.array([
             u.tail_alpha, u.tail_beta, u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Cn_tail_damp_r_padded = jnp.array([0.0, 0.0, Cn_tail_damp_r])
-        Cn_tail_damp_r_padded_transformed = jnp.dot(tail_transform, Cn_tail_damp_r_padded * Cn_Scale_r)
+        Cn_tail_damp_r_padded = np.array([0.0, 0.0, Cn_tail_damp_r])
+        Cn_tail_damp_r_padded_transformed = np.dot(tail_transform, Cn_tail_damp_r_padded * Cn_Scale_r)
 
         # Wing
-        Cn_wing = self.Cn_wing_lookup_table(jnp.array([
+        Cn_wing = self.Cn_wing_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cn_wing_padded = jnp.array([0.0, 0.0, Cn_wing])
-        Cn_wing_padded_transformed = jnp.dot(wing_transform, Cn_wing_padded * Cn_Scale)
+        Cn_wing_padded = np.array([0.0, 0.0, Cn_wing])
+        Cn_wing_padded_transformed = np.dot(wing_transform, Cn_wing_padded * Cn_Scale)
 
         # Wing Damp p
-        Cn_wing_damp_p = self.Cn_wing_damp_p_lookup_table(jnp.array([
+        Cn_wing_damp_p = self.Cn_wing_damp_p_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cn_wing_damp_p_padded = jnp.array([0.0, 0.0, Cn_wing_damp_p])
-        Cn_wing_damp_p_padded_transformed = jnp.dot(wing_transform, Cn_wing_damp_p_padded * Cn_Scale_p)
+        Cn_wing_damp_p_padded = np.array([0.0, 0.0, Cn_wing_damp_p])
+        Cn_wing_damp_p_padded_transformed = np.dot(wing_transform, Cn_wing_damp_p_padded * Cn_Scale_p)
 
         # Wing Damp q
-        Cn_wing_damp_q = self.Cn_wing_damp_q_lookup_table(jnp.array([
+        Cn_wing_damp_q = self.Cn_wing_damp_q_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cn_wing_damp_q_padded = jnp.array([0.0, 0.0, Cn_wing_damp_q])
-        Cn_wing_damp_q_padded_transformed = jnp.dot(wing_transform, Cn_wing_damp_q_padded * Cn_Scale_q)
+        Cn_wing_damp_q_padded = np.array([0.0, 0.0, Cn_wing_damp_q])
+        Cn_wing_damp_q_padded_transformed = np.dot(wing_transform, Cn_wing_damp_q_padded * Cn_Scale_q)
 
         # Wing Damp r
-        Cn_wing_damp_r = self.Cn_wing_damp_r_lookup_table(jnp.array([
+        Cn_wing_damp_r = self.Cn_wing_damp_r_lookup_table(np.array([
             u.wing_alpha, u.wing_beta, u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Cn_wing_damp_r_padded = jnp.array([0.0, 0.0, Cn_wing_damp_r])
-        Cn_wing_damp_r_padded_transformed = jnp.dot(wing_transform, Cn_wing_damp_r_padded * Cn_Scale_r)
+        Cn_wing_damp_r_padded = np.array([0.0, 0.0, Cn_wing_damp_r])
+        Cn_wing_damp_r_padded_transformed = np.dot(wing_transform, Cn_wing_damp_r_padded * Cn_Scale_r)
 
         # Hover Fuse
-        Cn_hover_fuse = self.Cn_hover_fuse_lookup_table(jnp.array([
+        Cn_hover_fuse = self.Cn_hover_fuse_lookup_table(np.array([
             u.U, u.alpha, u.beta
         ]))
-        Cn_hover_fuse_padded = jnp.array([0.0, 0.0, Cn_hover_fuse * Cn_Scale]) 
+        Cn_hover_fuse_padded = np.array([0.0, 0.0, Cn_hover_fuse * Cn_Scale]) 
 
         return Moments(
             Cn_aileron_wing_padded_transformed[0] + Cn_elevator_tail_padded_transformed[0] + Cn_flap_wing_padded_transformed[0] + Cn_rudder_tail_padded_transformed[0] +
@@ -1341,89 +1330,89 @@ class MavrikAero:
         self.RPM_right_12_out_trans = mavrik_setup.RPM_right_12_out_trans 
         
     def Ct(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Tuple[Forces, Moments]:
-        Ct_tail_left = self.Ct_tail_left_lookup_table(jnp.array([
+        Ct_tail_left = self.Ct_tail_left_lookup_table(np.array([
             u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Ct_tail_left_padded = jnp.array([Ct_tail_left, 0., 0.])
-        Ct_tail_left_transformed = jnp.dot(tail_transform, Ct_tail_left_padded * (1.225 * u.RPM_tailLeft**2 * 0.005059318992632 * 2.777777777777778e-4))
+        Ct_tail_left_padded = np.array([Ct_tail_left, 0., 0.])
+        Ct_tail_left_transformed = np.dot(tail_transform, Ct_tail_left_padded * (1.225 * u.RPM_tailLeft**2 * 0.005059318992632 * 2.777777777777778e-4))
 
-        Ct_tail_right = self.Ct_tail_right_lookup_table(jnp.array([
+        Ct_tail_right = self.Ct_tail_right_lookup_table(np.array([
             u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Ct_tail_right_padded = jnp.array([Ct_tail_right, 0., 0.])
-        Ct_tail_right_transformed = jnp.dot(tail_transform, Ct_tail_right_padded * (1.225 * u.RPM_tailRight**2 * 0.005059318992632 * 2.777777777777778e-4))
+        Ct_tail_right_padded = np.array([Ct_tail_right, 0., 0.])
+        Ct_tail_right_transformed = np.dot(tail_transform, Ct_tail_right_padded * (1.225 * u.RPM_tailRight**2 * 0.005059318992632 * 2.777777777777778e-4))
 
-        Ct_left_out1 = self.Ct_left_out1_lookup_table(jnp.array([
+        Ct_left_out1 = self.Ct_left_out1_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_left_out1_padded = jnp.array([Ct_left_out1, 0., 0.])
-        Ct_left_out1_transformed = jnp.dot(wing_transform, Ct_left_out1_padded * (1.225 * u.RPM_leftOut1**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_left_out1_padded = np.array([Ct_left_out1, 0., 0.])
+        Ct_left_out1_transformed = np.dot(wing_transform, Ct_left_out1_padded * (1.225 * u.RPM_leftOut1**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_left_2 = self.Ct_left_2_lookup_table(jnp.array([
+        Ct_left_2 = self.Ct_left_2_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_left_2_padded = jnp.array([Ct_left_2, 0., 0.])
-        Ct_left_2_transformed = jnp.dot(wing_transform, Ct_left_2_padded * (1.225 * u.RPM_left2**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_left_2_padded = np.array([Ct_left_2, 0., 0.])
+        Ct_left_2_transformed = np.dot(wing_transform, Ct_left_2_padded * (1.225 * u.RPM_left2**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_left_3 = self.Ct_left_3_lookup_table(jnp.array([
+        Ct_left_3 = self.Ct_left_3_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_left_3_padded = jnp.array([Ct_left_3, 0., 0.])
-        Ct_left_3_transformed = jnp.dot(wing_transform, Ct_left_3_padded * (1.225 * u.RPM_left3**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_left_3_padded = np.array([Ct_left_3, 0., 0.])
+        Ct_left_3_transformed = np.dot(wing_transform, Ct_left_3_padded * (1.225 * u.RPM_left3**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_left_4 = self.Ct_left_4_lookup_table(jnp.array([
+        Ct_left_4 = self.Ct_left_4_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_left_4_padded = jnp.array([Ct_left_4, 0., 0.])
-        Ct_left_4_transformed = jnp.dot(wing_transform, Ct_left_4_padded * (1.225 * u.RPM_left4**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_left_4_padded = np.array([Ct_left_4, 0., 0.])
+        Ct_left_4_transformed = np.dot(wing_transform, Ct_left_4_padded * (1.225 * u.RPM_left4**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_left_5 = self.Ct_left_5_lookup_table(jnp.array([
+        Ct_left_5 = self.Ct_left_5_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_left_5_padded = jnp.array([Ct_left_5, 0., 0.])
-        Ct_left_5_transformed = jnp.dot(wing_transform, Ct_left_5_padded * (1.225 * u.RPM_left5**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_left_5_padded = np.array([Ct_left_5, 0., 0.])
+        Ct_left_5_transformed = np.dot(wing_transform, Ct_left_5_padded * (1.225 * u.RPM_left5**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_left_6_in = self.Ct_left_6_in_lookup_table(jnp.array([
+        Ct_left_6_in = self.Ct_left_6_in_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_left_6_in_padded = jnp.array([Ct_left_6_in, 0., 0.])
-        Ct_left_6_in_transformed = jnp.dot(wing_transform, Ct_left_6_in_padded * (1.225 * u.RPM_left6In**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_left_6_in_padded = np.array([Ct_left_6_in, 0., 0.])
+        Ct_left_6_in_transformed = np.dot(wing_transform, Ct_left_6_in_padded * (1.225 * u.RPM_left6In**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_right_7_in = self.Ct_right_7_in_lookup_table(jnp.array([
+        Ct_right_7_in = self.Ct_right_7_in_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_7_in_padded = jnp.array([Ct_right_7_in, 0., 0.])
-        Ct_right_7_in_transformed = jnp.dot(wing_transform, Ct_right_7_in_padded * (1.225 * u.RPM_right7In**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_right_7_in_padded = np.array([Ct_right_7_in, 0., 0.])
+        Ct_right_7_in_transformed = np.dot(wing_transform, Ct_right_7_in_padded * (1.225 * u.RPM_right7In**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_right_8 = self.Ct_right_8_lookup_table(jnp.array([
+        Ct_right_8 = self.Ct_right_8_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_8_padded = jnp.array([Ct_right_8, 0., 0.])
-        Ct_right_8_transformed = jnp.dot(wing_transform, Ct_right_8_padded * (1.225 * u.RPM_right8**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_right_8_padded = np.array([Ct_right_8, 0., 0.])
+        Ct_right_8_transformed = np.dot(wing_transform, Ct_right_8_padded * (1.225 * u.RPM_right8**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_right_9 = self.Ct_right_9_lookup_table(jnp.array([
+        Ct_right_9 = self.Ct_right_9_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_9_padded = jnp.array([Ct_right_9, 0., 0.])
-        Ct_right_9_transformed = jnp.dot(wing_transform, Ct_right_9_padded * (1.225 * u.RPM_right9**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_right_9_padded = np.array([Ct_right_9, 0., 0.])
+        Ct_right_9_transformed = np.dot(wing_transform, Ct_right_9_padded * (1.225 * u.RPM_right9**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_right_10 = self.Ct_right_10_lookup_table(jnp.array([
+        Ct_right_10 = self.Ct_right_10_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_10_padded = jnp.array([Ct_right_10, 0., 0.])
-        Ct_right_10_transformed = jnp.dot(wing_transform, Ct_right_10_padded * (1.225 * u.RPM_right10**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_right_10_padded = np.array([Ct_right_10, 0., 0.])
+        Ct_right_10_transformed = np.dot(wing_transform, Ct_right_10_padded * (1.225 * u.RPM_right10**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_right_11 = self.Ct_right_11_lookup_table(jnp.array([
+        Ct_right_11 = self.Ct_right_11_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_11_padded = jnp.array([Ct_right_11, 0., 0.])
-        Ct_right_11_transformed = jnp.dot(wing_transform, Ct_right_11_padded * (1.225 * u.RPM_right11**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_right_11_padded = np.array([Ct_right_11, 0., 0.])
+        Ct_right_11_transformed = np.dot(wing_transform, Ct_right_11_padded * (1.225 * u.RPM_right11**2 * 0.021071715921 * 2.777777777777778e-4))
 
-        Ct_right_12_out = self.Ct_right_12_out_lookup_table(jnp.array([
+        Ct_right_12_out = self.Ct_right_12_out_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Ct_right_12_out_padded = jnp.array([Ct_right_12_out, 0., 0.])
-        Ct_right_12_out_transformed = jnp.dot(wing_transform, Ct_right_12_out_padded * (1.225 * u.RPM_right12Out**2 * 0.021071715921 * 2.777777777777778e-4))
+        Ct_right_12_out_padded = np.array([Ct_right_12_out, 0., 0.])
+        Ct_right_12_out_transformed = np.dot(wing_transform, Ct_right_12_out_padded * (1.225 * u.RPM_right12Out**2 * 0.021071715921 * 2.777777777777778e-4))
 
         forces = Forces(
             Ct_tail_left_transformed[0] + Ct_tail_right_transformed[0] + Ct_left_out1_transformed[0] + Ct_left_2_transformed[0] + Ct_left_3_transformed[0] + 
@@ -1437,20 +1426,20 @@ class MavrikAero:
             Ct_right_9_transformed[2] + Ct_right_10_transformed[2] + Ct_right_11_transformed[2] + Ct_right_12_out_transformed[2]
             )
 
-        Ct_tail_left_transformed = jnp.cross(self.RPM_tail_left_trans, Ct_tail_left_transformed)
-        Ct_tail_right_transformed = jnp.cross(self.RPM_tail_right_trans, Ct_tail_right_transformed)
-        Ct_left_out1_transformed = jnp.cross(self.RPM_left_out1_trans, Ct_left_out1_transformed)
-        Ct_left_2_transformed = jnp.cross(self.RPM_left_2_trans, Ct_left_2_transformed)
-        Ct_left_3_transformed = jnp.cross(self.RPM_left_3_trans, Ct_left_3_transformed)
-        Ct_left_4_transformed = jnp.cross(self.RPM_left_4_trans, Ct_left_4_transformed)
-        Ct_left_5_transformed = jnp.cross(self.RPM_left_5_trans, Ct_left_5_transformed)
-        Ct_left_6_in_transformed = jnp.cross(self.RPM_left_6_in_trans, Ct_left_6_in_transformed)
-        Ct_right_7_in_transformed = jnp.cross(self.RPM_right_7_in_trans, Ct_right_7_in_transformed)
-        Ct_right_8_transformed = jnp.cross(self.RPM_right_8_trans, Ct_right_8_transformed)
-        Ct_right_9_transformed = jnp.cross(self.RPM_right_9_trans, Ct_right_9_transformed)
-        Ct_right_10_transformed = jnp.cross(self.RPM_right_10_trans, Ct_right_10_transformed)
-        Ct_right_11_transformed = jnp.cross(self.RPM_right_11_trans, Ct_right_11_transformed)
-        Ct_right_12_out_transformed = jnp.cross(self.RPM_right_12_out_trans, Ct_right_12_out_transformed)
+        Ct_tail_left_transformed = np.cross(self.RPM_tail_left_trans, Ct_tail_left_transformed)
+        Ct_tail_right_transformed = np.cross(self.RPM_tail_right_trans, Ct_tail_right_transformed)
+        Ct_left_out1_transformed = np.cross(self.RPM_left_out1_trans, Ct_left_out1_transformed)
+        Ct_left_2_transformed = np.cross(self.RPM_left_2_trans, Ct_left_2_transformed)
+        Ct_left_3_transformed = np.cross(self.RPM_left_3_trans, Ct_left_3_transformed)
+        Ct_left_4_transformed = np.cross(self.RPM_left_4_trans, Ct_left_4_transformed)
+        Ct_left_5_transformed = np.cross(self.RPM_left_5_trans, Ct_left_5_transformed)
+        Ct_left_6_in_transformed = np.cross(self.RPM_left_6_in_trans, Ct_left_6_in_transformed)
+        Ct_right_7_in_transformed = np.cross(self.RPM_right_7_in_trans, Ct_right_7_in_transformed)
+        Ct_right_8_transformed = np.cross(self.RPM_right_8_trans, Ct_right_8_transformed)
+        Ct_right_9_transformed = np.cross(self.RPM_right_9_trans, Ct_right_9_transformed)
+        Ct_right_10_transformed = np.cross(self.RPM_right_10_trans, Ct_right_10_transformed)
+        Ct_right_11_transformed = np.cross(self.RPM_right_11_trans, Ct_right_11_transformed)
+        Ct_right_12_out_transformed = np.cross(self.RPM_right_12_out_trans, Ct_right_12_out_transformed)
         
 
         moments = Moments(
@@ -1525,89 +1514,89 @@ class MavrikAero:
         self.Kq_right_12_out_lookup_table = JaxNDInterpolator(Kq_right_12_out_breakpoints, Kq_right_12_out_value)
 
     def Kq(self, u: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Moments:
-        Kq_tail_left = self.Kq_tail_left_lookup_table(jnp.array([
+        Kq_tail_left = self.Kq_tail_left_lookup_table(np.array([
             u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Kq_tail_left_padded = jnp.array([Kq_tail_left, 0., 0.])
-        Kq_tail_left_transformed = jnp.dot(tail_transform, Kq_tail_left_padded * (-1.225 * u.RPM_tailLeft**2 * 0.001349320375335 * 2.777777777777778e-4))
+        Kq_tail_left_padded = np.array([Kq_tail_left, 0., 0.])
+        Kq_tail_left_transformed = np.dot(tail_transform, Kq_tail_left_padded * (-1.225 * u.RPM_tailLeft**2 * 0.001349320375335 * 2.777777777777778e-4))
 
-        Kq_tail_right = self.Kq_tail_right_lookup_table(jnp.array([
+        Kq_tail_right = self.Kq_tail_right_lookup_table(np.array([
             u.U, u.tail_RPM, u.tail_prop_alpha, u.tail_prop_beta
         ]))
-        Kq_tail_right_padded = jnp.array([Kq_tail_right, 0., 0.])
-        Kq_tail_right_transformed = jnp.dot(tail_transform, Kq_tail_right_padded * (1.225 * u.RPM_tailRight**2 * 0.001349320375335 * 2.777777777777778e-4))
+        Kq_tail_right_padded = np.array([Kq_tail_right, 0., 0.])
+        Kq_tail_right_transformed = np.dot(tail_transform, Kq_tail_right_padded * (1.225 * u.RPM_tailRight**2 * 0.001349320375335 * 2.777777777777778e-4))
 
-        Kq_left_out = self.Kq_left_out_lookup_table(jnp.array([
+        Kq_left_out = self.Kq_left_out_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_left_out_padded = jnp.array([Kq_left_out, 0., 0.])
-        Kq_left_out_transformed = jnp.dot(wing_transform, Kq_left_out_padded * (1.225 * u.RPM_leftOut1**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_left_out_padded = np.array([Kq_left_out, 0., 0.])
+        Kq_left_out_transformed = np.dot(wing_transform, Kq_left_out_padded * (1.225 * u.RPM_leftOut1**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_left_2 = self.Kq_left_2_lookup_table(jnp.array([
+        Kq_left_2 = self.Kq_left_2_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_left_2_padded = jnp.array([Kq_left_2, 0., 0.])
-        Kq_left_2_transformed = jnp.dot(wing_transform, Kq_left_2_padded * (-1.225 * u.RPM_left2**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_left_2_padded = np.array([Kq_left_2, 0., 0.])
+        Kq_left_2_transformed = np.dot(wing_transform, Kq_left_2_padded * (-1.225 * u.RPM_left2**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_left_3 = self.Kq_left_3_lookup_table(jnp.array([
+        Kq_left_3 = self.Kq_left_3_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_left_3_padded = jnp.array([Kq_left_3, 0., 0.])
-        Kq_left_3_transformed = jnp.dot(wing_transform, Kq_left_3_padded * (1.225 * u.RPM_left3**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_left_3_padded = np.array([Kq_left_3, 0., 0.])
+        Kq_left_3_transformed = np.dot(wing_transform, Kq_left_3_padded * (1.225 * u.RPM_left3**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_left_4 = self.Kq_left_4_lookup_table(jnp.array([
+        Kq_left_4 = self.Kq_left_4_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_left_4_padded = jnp.array([Kq_left_4, 0., 0.])
-        Kq_left_4_transformed = jnp.dot(wing_transform, Kq_left_4_padded * (-1.225 * u.RPM_left4**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_left_4_padded = np.array([Kq_left_4, 0., 0.])
+        Kq_left_4_transformed = np.dot(wing_transform, Kq_left_4_padded * (-1.225 * u.RPM_left4**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_left_5 = self.Kq_left_5_lookup_table(jnp.array([
+        Kq_left_5 = self.Kq_left_5_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_left_5_padded = jnp.array([Kq_left_5, 0., 0.])
-        Kq_left_5_transformed = jnp.dot(wing_transform, Kq_left_5_padded * (1.225 * u.RPM_left5**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_left_5_padded = np.array([Kq_left_5, 0., 0.])
+        Kq_left_5_transformed = np.dot(wing_transform, Kq_left_5_padded * (1.225 * u.RPM_left5**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_left_6_in = self.Kq_left_6_in_lookup_table(jnp.array([
+        Kq_left_6_in = self.Kq_left_6_in_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_left_6_in_padded = jnp.array([Kq_left_6_in, 0., 0.])
-        Kq_left_6_in_transformed = jnp.dot(wing_transform, Kq_left_6_in_padded * (-1.225 * u.RPM_left6In**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_left_6_in_padded = np.array([Kq_left_6_in, 0., 0.])
+        Kq_left_6_in_transformed = np.dot(wing_transform, Kq_left_6_in_padded * (-1.225 * u.RPM_left6In**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_right_7_in = self.Kq_right_7_in_lookup_table(jnp.array([
+        Kq_right_7_in = self.Kq_right_7_in_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_right_7_in_padded = jnp.array([Kq_right_7_in, 0., 0.])
-        Kq_right_7_in_transformed = jnp.dot(wing_transform, Kq_right_7_in_padded * (-1.225 * u.RPM_right7In**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_right_7_in_padded = np.array([Kq_right_7_in, 0., 0.])
+        Kq_right_7_in_transformed = np.dot(wing_transform, Kq_right_7_in_padded * (-1.225 * u.RPM_right7In**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_right_8 = self.Kq_right_8_lookup_table(jnp.array([
+        Kq_right_8 = self.Kq_right_8_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_right_8_padded = jnp.array([Kq_right_8, 0., 0.])
-        Kq_right_8_transformed = jnp.dot(wing_transform, Kq_right_8_padded * (1.225 * u.RPM_right8**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_right_8_padded = np.array([Kq_right_8, 0., 0.])
+        Kq_right_8_transformed = np.dot(wing_transform, Kq_right_8_padded * (1.225 * u.RPM_right8**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_right_9 = self.Kq_right_9_lookup_table(jnp.array([
+        Kq_right_9 = self.Kq_right_9_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_right_9_padded = jnp.array([Kq_right_9, 0., 0.])
-        Kq_right_9_transformed = jnp.dot(wing_transform, Kq_right_9_padded * (-1.225 * u.RPM_right9**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_right_9_padded = np.array([Kq_right_9, 0., 0.])
+        Kq_right_9_transformed = np.dot(wing_transform, Kq_right_9_padded * (-1.225 * u.RPM_right9**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_right_10 = self.Kq_right_10_lookup_table(jnp.array([
+        Kq_right_10 = self.Kq_right_10_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_right_10_padded = jnp.array([Kq_right_10, 0., 0.])
-        Kq_right_10_transformed = jnp.dot(wing_transform, Kq_right_10_padded * (1.225 * u.RPM_right10**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_right_10_padded = np.array([Kq_right_10, 0., 0.])
+        Kq_right_10_transformed = np.dot(wing_transform, Kq_right_10_padded * (1.225 * u.RPM_right10**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_right_11 = self.Kq_right_11_lookup_table(jnp.array([
+        Kq_right_11 = self.Kq_right_11_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_right_11_padded = jnp.array([Kq_right_11, 0., 0.])
-        Kq_right_11_transformed = jnp.dot(wing_transform, Kq_right_11_padded * (-1.225 * u.RPM_right11**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_right_11_padded = np.array([Kq_right_11, 0., 0.])
+        Kq_right_11_transformed = np.dot(wing_transform, Kq_right_11_padded * (-1.225 * u.RPM_right11**2 * 0.008028323765901 * 2.777777777777778e-4))
 
-        Kq_right_12_out = self.Kq_right_12_out_lookup_table(jnp.array([
+        Kq_right_12_out = self.Kq_right_12_out_lookup_table(np.array([
             u.U, u.wing_RPM, u.wing_prop_alpha, u.wing_prop_beta
         ]))
-        Kq_right_12_out_padded = jnp.array([Kq_right_12_out, 0., 0.])
-        Kq_right_12_out_transformed = jnp.dot(wing_transform, Kq_right_12_out_padded * (1.225 * u.RPM_right12Out**2 * 0.008028323765901 * 2.777777777777778e-4))
+        Kq_right_12_out_padded = np.array([Kq_right_12_out, 0., 0.])
+        Kq_right_12_out_transformed = np.dot(wing_transform, Kq_right_12_out_padded * (1.225 * u.RPM_right12Out**2 * 0.008028323765901 * 2.777777777777778e-4))
 
         return Moments(
             Kq_tail_left_transformed[0] + Kq_tail_right_transformed[0] + Kq_left_out_transformed[0] + Kq_left_2_transformed[0] + Kq_left_3_transformed[0] + 
