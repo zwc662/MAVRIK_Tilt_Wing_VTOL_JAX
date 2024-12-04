@@ -17,6 +17,8 @@ from typing import Tuple, List
 from multiprocessing import Pool
 import time
 
+import itertools
+
 
 @jit
 def linear_interpolate(v0, v1, weight):
@@ -32,7 +34,7 @@ def get_index_and_weight(value, breakpoints):
     return idx, weight
 
 @jit
-def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: jnp.ndarray) -> float:
+def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: jnp.ndarray, corner_offsets: jnp.ndarray) -> float:
     """
     Perform n-dimensional interpolation using vectorized JAX operations.
 
@@ -58,30 +60,36 @@ def interpolate_nd(inputs: jnp.ndarray, breakpoints: List[jnp.ndarray], values: 
     weights = jnp.array(weights)
 
     # Generate corner indices for interpolation
-    corner_indices = jnp.stack(jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"), axis=-1).reshape(-1, ndim)
+    #corner_indices = jnp.stack(jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"), axis=-1).reshape(-1, ndim)
+    #corner_indices = jnp.array(list(itertools.product([0, 1], repeat=ndim)), dtype=int)
 
     # Function to compute interpolated values for each corner
-    def compute_corner_value(corner):
-        corner_idx = indices + corner
+    def compute_corner_value(corner_offset):
+        corner_idx = indices + corner_offset
         corner_value = values[tuple(corner_idx)]
-        corner_weight = jnp.prod(jnp.where(corner, weights, 1 - weights))
+        corner_weight = jnp.prod(jnp.where(corner_offset, weights, 1 - weights))
         return corner_value * corner_weight
 
     # Vectorize computation across all corners
-    interpolated_values = vmap(compute_corner_value)(corner_indices)
+    interpolated_values = vmap(compute_corner_value)(corner_offsets)
 
     # Sum contributions from all corners
     return jnp.sum(interpolated_values)
 
 class JaxNDInterpolator:
     def __init__(self, breakpoints: List[jnp.ndarray], values: jnp.ndarray):
-        self.breakpoints = breakpoints
-        self.values = values
+        ndim = len(breakpoints)
+        breakpoints = breakpoints
+        values = values
+        corner_offsets = jnp.stack(
+            jnp.meshgrid(*[jnp.array([0, 1]) for _ in range(ndim)], indexing="ij"),
+            axis=-1
+        ).reshape(-1, ndim)
+        self.interpolator = ft.partial(interpolate_nd, breakpoints=breakpoints, values=values, corner_offsets = corner_offsets)
  
     def __call__(self, inputs: jnp.ndarray) -> float:
         # Use partial to create a JAX-compatible function with fixed breakpoints and values
-        interpolator = ft.partial(interpolate_nd, breakpoints=self.breakpoints, values=self.values)
-        return interpolator(inputs)
+        return self.interpolator(inputs)
 
 class MavrikAero:
     def __init__(self, mavrik_setup: MavrikSetup):
@@ -135,10 +143,33 @@ class MavrikAero:
     
     def parallel_interpolate(self, actuator_outputs: ActuatorOutput, wing_transform: FloatScalar, tail_transform: FloatScalar) -> Tuple[Forces, Moments, ActuatorOutput]: 
         # Use a Pool to run functions in parallel
+
+        def lookup_table_interpolate(f, actuator_outputs, wing_transform, tail_transform):
+            if f == 'Ct':
+                F0, M0 = self.Ct(actuator_outputs, wing_transform, tail_transform)
+                return (F0, M0)
+            elif f == 'Cx':
+                return self.Cx(actuator_outputs, wing_transform, tail_transform)
+            elif f == 'Cy':
+                return self.Cy(actuator_outputs, wing_transform, tail_transform)
+            elif f == 'Cz':
+                return self.Cz(actuator_outputs, wing_transform, tail_transform)
+            elif f == 'L':
+                return self.L(actuator_outputs, wing_transform, tail_transform)
+            elif f == 'M':
+                return self.M(actuator_outputs, wing_transform, tail_transform)
+            elif f == 'N':
+                return self.N(actuator_outputs, wing_transform, tail_transform)
+            elif f == 'Kq':
+                return self.Kq(actuator_outputs, wing_transform, tail_transform)
+            else:
+                raise ValueError(f"Invalid function {f}")
+            
         with Pool(processes=8) as pool:  # Use as many processes as cores available
-            results = pool.map(lambda f: f(actuator_outputs, wing_transform, tail_transform), 
-                               [self.Ct, self.Cx, self.Cy, self.Cz, self.L, self.M, self.N, self.Kq]
-                               )
+            results = pool.map(
+                ft.partial(lookup_table_interpolate, actuator_outputs=actuator_outputs, wing_transform=wing_transform, tail_transform=tail_transform),
+                           ['Ct', 'Cx', 'Cy', 'Cz', 'L', 'M', 'N', 'Kq']
+                           )
             F0, M0 = results[0]
             F1 = results[1]
             F2 = results[2]
