@@ -15,7 +15,7 @@ from jax_mavrik.src.mavrik_aero import MavrikAero
 from jax_mavrik.mavrik_setup import MavrikSetup
 
 def wrap_to_pi(angle):
-    return (angle + jnp.pi) % (2 * jnp.pi) - jnp.pi
+    return (angle + np.pi) % (2 * np.pi) - np.pi
 
 class Simulator:
     def __init__(self, mavrik_setup: MavrikSetup, method: str = 'diffrax', fixed_step_size: float = 0.01):
@@ -28,15 +28,15 @@ class Simulator:
         # Calculate forces and moments using Mavrik Aero model
         forces, moments, _ = self.aero_model(state, control) 
         sixdof_state = SixDOFState(
-            Vned=jnp.array([state.VXe, state.VYe, state.VZe]),
-            Xned=jnp.array([state.Xe, state.Ye, state.Ze]),
-            Vb=jnp.array([state.u, state.v, state.w]), 
-            Euler=wrap_to_pi(jnp.array([state.roll, state.pitch, state.yaw])),
-            pqr=jnp.array([state.p, state.q, state.r])
+            Vned=np.array([state.VXe, state.VYe, state.VZe]),
+            Xned=np.array([state.Xe, state.Ye, state.Ze]),
+            Vb=np.array([state.u, state.v, state.w]), 
+            Euler=wrap_to_pi(np.array([state.roll, state.pitch, state.yaw])),
+            pqr=np.array([state.p, state.q, state.r])
         )
  
-        sixdof_forces = jnp.array([forces.Fx, forces.Fy, forces.Fz])
-        sixdof_moments = jnp.array([moments.L, moments.M, moments.N])
+        sixdof_forces = np.array([forces.Fx, forces.Fy, forces.Fz])
+        sixdof_moments = np.array([moments.L, moments.M, moments.N])
         # Compute the state derivatives using 6DOF dynamics
         nxt_sixdof_state, info = self.sixdof_model.run_simulation(sixdof_state, sixdof_forces, sixdof_moments, dt) 
         

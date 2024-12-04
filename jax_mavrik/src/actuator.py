@@ -41,9 +41,9 @@ class ActuatorInutState(NamedTuple):
     
     @staticmethod
     def from_input(u: np.ndarray) -> 'ActuatorInutState':
-        U = jnp.sqrt(u[0]**2 + u[1]**2 + u[2]**2)
-        alpha = jnp.arctan2(u[2], u[0])
-        beta = jnp.arctan2(u[1], jnp.sqrt(u[0]**2 + u[2]**2))
+        U = np.sqrt(u[0]**2 + u[1]**2 + u[2]**2)
+        alpha = np.arctan2(u[2], u[0])
+        beta = np.arctan2(u[1], np.sqrt(u[0]**2 + u[2]**2))
         p = u[3]
         q = u[4]
         r = u[5]

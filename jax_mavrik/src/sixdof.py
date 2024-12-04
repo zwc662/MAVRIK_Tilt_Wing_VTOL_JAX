@@ -98,10 +98,8 @@ class SixDOFDynamics:
             array([dp, dq, dr]), ## Update pqr from state[9:12]
             array([dVXe, dVYe, dVZe]),  ## Update vned at state[12:15] 
             ])
-                                      
-    
- 
-    def run_simulation(self, initial_state: SixDOFState, forces: FloatScalar, moments: FloatScalar, t=0.01) -> Tuple[SixDOFState, Dict[str, jnp.ndarray]]:
+
+    def run_simulation(self, initial_state: SixDOFState, forces: FloatScalar, moments: FloatScalar, t=0.01) -> Tuple[SixDOFState, Dict[str, np.ndarray]]:
         """
         Run the 6DOF dynamics simulation.
         
@@ -118,50 +116,58 @@ class SixDOFDynamics:
             dict: A dictionary containing time and state history.
         """
         #print(f"Running simulation: initial_state = {initial_state}, forces = {forces}, moments = {moments}, t = {t}")
-        initial_state_vector = jnp.concatenate([
+        initial_state_vector = np.concatenate([
             initial_state.Xned,
             initial_state.Vb, 
             initial_state.Euler,
             initial_state.pqr, 
             initial_state.Vned  # Add zeros for vned, dotpqr and ab
         ])
-        forces = jnp.asarray(forces)
-        moments = jnp.asarray(moments)
+        forces = np.asarray(forces)
+        moments = np.asarray(moments)
 
-        num_points = jnp.ceil(t / self.fixed_step_size).astype(int)
-        times = jnp.linspace(0, t, num_points)
+        num_points = np.ceil(t / self.fixed_step_size).astype(int)
+        times = np.linspace(0, t, num_points)
         if self.method.lower() == "rk4":
             def rk4_step(state, forces_moments):
                 forces, moments = forces_moments
-                forces, moments = jnp.asarray(forces), jnp.asarray(moments)
+                #forces, moments = jnp.asarray(forces), jnp.asarray(moments)
                 k1 = self.fixed_step_size * self._six_dof_dynamics(state, forces, moments)
                 k2 = self.fixed_step_size * self._six_dof_dynamics(state + k1/2, forces, moments)
                 k3 = self.fixed_step_size * self._six_dof_dynamics(state + k2/2, forces, moments)
                 k4 = self.fixed_step_size * self._six_dof_dynamics(state + k3, forces, moments)
                 new_state = state + (k1 + 2*k2 + 2*k3 + k4) / 6
                 return new_state, new_state
-
-            forces_moments = (jnp.tile(forces, (num_points, 1)), jnp.tile(moments, (num_points, 1)))
-            _, states = lax.scan(rk4_step, initial_state_vector, forces_moments)
-            '''
-            states = []
-            state = initial_state_vector
-            for i in range(num_points):
-                state, _ = rk4_step(state, (forces, moments))
-                states.append(state)
-                print(f"Step {i}: state = {state}")
-            states = jnp.array(states)
-            '''
+            
+            if num_points > 10:
+                forces_moments = (jnp.tile(forces, (num_points, 1)), jnp.tile(moments, (num_points, 1)))
+                _, states = lax.scan(rk4_step, initial_state_vector, forces_moments)
+            else:
+                states = []
+                state = initial_state_vector
+                for i in range(num_points):
+                    state, _ = rk4_step(state, (forces, moments))
+                    states.append(state)
+                    #print(f"Step {i}: state = {state}")
+                states = np.array(states)
+             
 
         elif self.method.lower() == "euler":
             def euler_step(state, forces_moments):
                 forces, moments = forces_moments
-                forces, moments = jnp.asarray(forces), jnp.asarray(moments)
+                #forces, moments = jnp.asarray(forces), jnp.asarray(moments)
                 new_state = state + self.fixed_step_size * self._six_dof_dynamics(state, forces, moments)
                 return new_state, new_state
-
-            forces_moments = (jnp.tile(forces, (num_points, 1)), jnp.tile(moments, (num_points, 1)))
-            _, states = lax.scan(euler_step, initial_state_vector, forces_moments)
+            if num_points > 10:
+                forces_moments = (jnp.tile(forces, (num_points, 1)), jnp.tile(moments, (num_points, 1)))
+                _, states = lax.scan(euler_step, initial_state_vector, forces_moments)
+            else:
+                states = []
+                state = initial_state_vector
+                for i in range(num_points):
+                    state, _ = euler_step(state, (forces, moments))
+                    #states.append(state)
+                states = np.array(states)
         elif self.method.lower() == "diffrax":
             ### diffrax has some resolved issues:
             ##### The first state output will remain the same as the initial state
