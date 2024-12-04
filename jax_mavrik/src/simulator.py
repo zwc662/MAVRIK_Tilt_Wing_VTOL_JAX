@@ -21,7 +21,7 @@ class Simulator:
     def __init__(self, mavrik_setup: MavrikSetup, method: str = 'diffrax', fixed_step_size: float = 0.01):
         rigid_body = RigidBody(mass=mavrik_setup.mass, inertia=mavrik_setup.inertia, inverse_inertia=np.linalg.inv(mavrik_setup.inertia))
         self.sixdof_model = SixDOFDynamics(rigid_body, method, fixed_step_size) 
-        self.aero_model = MavrikAero.create(mavrik_setup)
+        self.aero_model = MavrikAero(mavrik_setup)
  
 
     def run(self, state: StateVariables, control: ControlInputs, dt: Float) -> StateVariables:
