@@ -39,6 +39,18 @@ class Mavrik:
         nxt_state, info= self.simulator.run(cur_state, control_input, self.dt)
         info['control'] = control_input
         return np.asarray(list(nxt_state._asdict().values())), info
+    
+    def error_check(self, state: StateArr):
+        vned = state[MAVRIK_STATE.VXe:MAVRIK_STATE.VXe+3]
+        xned = state[MAVRIK_STATE.Xe:MAVRIK_STATE.Xe+3]
+        vb = state[MAVRIK_STATE.u:MAVRIK_STATE.u+3]
+        euler = state[MAVRIK_STATE.roll:MAVRIK_STATE.roll+3]
+        forces = state[MAVRIK_STATE.Fx:MAVRIK_STATE.Fx+3]
+        moments = state[MAVRIK_STATE.L:MAVRIK_STATE.L+3]
+        
+        if np.any(np.abs(forces) > 500) or np.any(np.abs(moments) > 500):
+            return True
+        return False
      
 # Example usage
 if __name__ == "__main__":
@@ -112,9 +124,9 @@ if __name__ == "__main__":
     ])
    
     state = np.array([
-        30.0, 0, 0, # VXe, VYe, VZe
-        0.0000, 0.0000, 0.0000,   # Xe Ye Ze
-        29.9269, 0, 2.0927, # u v w
+        0.0, 0, 0, # VXe, VYe, VZe
+        0.0000, 0.0000, 0.0000 - 20.,   # Xe Ye Ze
+        0 * 29.9269, 0, 0 * 2.0927, # u v w
         0, 0.0698, 0,   # roll, pitch, yaw 
         0.0, 0.0, 0.0,   # p, q, r
         0.0, 0.0, 0.0,   # Fx, Fy, Fz
@@ -125,10 +137,13 @@ if __name__ == "__main__":
 
     mavrik = Mavrik(method = 'rk4')
     
-    num_steps = int(0.1 / 0.01) * 10
+    num_steps = int(0.1 * 1e2 / 0.01)
     states = [state]
     tot_runtime = 0.0
     for i in range(num_steps):
+        if np.isnan(state).any():
+            print("State contains NaN values: ", state)
+            break
         start_time = time.time()
         state, info = mavrik.step(state, control)
         end_time = time.time()
@@ -145,7 +160,10 @@ if __name__ == "__main__":
         print(f"Vb: {vb}")# | Expected Vb: {expected_vb[i]} | Error: {np.linalg.norm(vb - expected_vb[i])}")
         euler = state[MAVRIK_STATE.roll:MAVRIK_STATE.roll+3]
         print(f"Euler: {euler}")# | Expected Euler: {expected_euler[i]} | Error: {np.linalg.norm(euler - expected_euler[i])}")
-         
+        forces = state[MAVRIK_STATE.Fx:MAVRIK_STATE.Fx+3]
+        print(f"Forces: {forces}")
+        moments = state[MAVRIK_STATE.L:MAVRIK_STATE.L+3]
+        print(f"Moments: {moments}")
         #expected_dcm = euler_to_dcm(*expected_euler[i])
         #vned_transformed = expected_dcm @ expected_vned[i]
         #print(f"DCM @ Expected Vned: {vned_transformed} | Expected Vb: {expected_vb[i]} | Error: {np.linalg.norm(vned_transformed - expected_vb[i])}")

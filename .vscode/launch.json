@@ -15,6 +15,17 @@
             "python": "/home/zhouw534/anaconda3/envs/mavrik/bin/python",
             "console": "integratedTerminal",
             "envFile": "${workspaceFolder}/.vscode/project.env",
+        },
+        {
+            "name": "Pytest: test_overflow",
+            "type": "python",
+            "request": "launch",
+            "module": "pytest",
+            "cwd": "${workspaceFolder}/tests/",
+            "args": ["${workspaceFolder}/tests/test_overflow.py", "-s"],
+            "python": "/home/zhouw534/anaconda3/envs/mavrik/bin/python",
+            "console": "integratedTerminal",
+            "envFile": "${workspaceFolder}/.vscode/project.env",
         }
     ] 
 }

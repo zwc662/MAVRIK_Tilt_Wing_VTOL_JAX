@@ -1,23 +1,44 @@
 import gym
-import numpy as np
-import jax.numpy as jnp
+import numpy as np 
 
 from typing import Optional
 
 from jax_mavrik.mavrik import Mavrik
- 
+
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Create console handler and set level to info
+ch = logging.StreamHandler()
+ch.setLevel(logging.INFO)
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s - Line: %(lineno)d')
+
+# Add formatter to console handler
+ch.setFormatter(formatter)
+
+# Add console handler to logger
+logger.addHandler(ch)
+
 
 class MavrikEnv(gym.Env):
     def __init__(self):
         super(MavrikEnv, self).__init__()
         self.mavrik = Mavrik()
-        self.target_altitude = 0.0
+        self.target_altitude = 2.0
         self.observation_space = gym.spaces.Box(low=-np.inf, high=np.inf, shape=(self.mavrik.state_ndim,), dtype=np.float32)
         self.action_space = gym.spaces.Box(low=-1.0, high=1.0, shape=(4,), dtype=np.float32)
-        self.max_velocity = 5.
+        self.max_speed = 5.
+        self.min_altitude = -1
+        self.max_altitude = 5
+
         self.state = self.reset()
     
-    def clip_control(self, control: np.ndarray) -> jnp.ndarray:
+    def clip_control(self, control: np.ndarray) -> np.ndarray:
         """
         Clips the control inputs to ensure they are within valid ranges.
 
@@ -28,18 +49,18 @@ class MavrikEnv(gym.Env):
             np.ndarray: Clipped control inputs.
         """
         # Wing and tail tilt angles [-pi/2, pi/2]
-        control[self.mavrik.CONTROL.wing_tilt] = jnp.clip(control[self.mavrik.CONTROL.wing_tilt], -np.pi / 2, np.pi / 2)
-        control[self.mavrik.CONTROL.tail_tilt] = jnp.clip(control[self.mavrik.CONTROL.tail_tilt], -np.pi / 2, np.pi / 2)
+        control[self.mavrik.CONTROL.wing_tilt] = np.clip(control[self.mavrik.CONTROL.wing_tilt], -np.pi / 2, np.pi / 2)
+        control[self.mavrik.CONTROL.tail_tilt] = np.clip(control[self.mavrik.CONTROL.tail_tilt], -np.pi / 2, np.pi / 2)
         
         # Aerodynamic control surfaces [-1, 1]
-        control[self.mavrik.CONTROL.aileron] = jnp.clip(control[self.mavrik.CONTROL.aileron], -1, 1)
-        control[self.mavrik.CONTROL.elevator] = jnp.clip(control[self.mavrik.CONTROL.elevator], -1, 1)
-        control[self.mavrik.CONTROL.flap] = jnp.clip(control[self.mavrik.CONTROL.flap], -1, 1)
-        control[self.mavrik.CONTROL.rudder] = jnp.clip(control[self.mavrik.CONTROL.rudder], -1, 1)
+        control[self.mavrik.CONTROL.aileron] = np.clip(control[self.mavrik.CONTROL.aileron], -1, 1)
+        control[self.mavrik.CONTROL.elevator] = np.clip(control[self.mavrik.CONTROL.elevator], -1, 1)
+        control[self.mavrik.CONTROL.flap] = np.clip(control[self.mavrik.CONTROL.flap], -1, 1)
+        control[self.mavrik.CONTROL.rudder] = np.clip(control[self.mavrik.CONTROL.rudder], -1, 1)
         
         # RPM values [0, 7500]
         for i in range(self.mavrik.CONTROL.RPM_tailLeft, self.mavrik.CONTROL.RPM_right12Out + 1):
-            control[i] = jnp.clip(control[i], 0, 7500)
+            control[i] = np.clip(control[i], 0, 7500)
     
         return control
     
@@ -66,39 +87,46 @@ class MavrikEnv(gym.Env):
         control[self.mavrik.CONTROL.RPM_tailRight] = np.clip(rpm_base - yaw_adjustment, 0, 7500)
 
         # Symmetric adjustment for mid rotors
-        mid_rotors_left = range(self.mavrik.CONTROL.RPM_left2, self.mavrik.CONTROL.RPM_left6In + 1)
-        mid_rotors_right = range(self.mavrik.CONTROL.RPM_right7In, self.mavrik.CONTROL.RPM_right11 + 1)
-        for i in mid_rotors_left:
+        for i in range(self.mavrik.CONTROL.RPM_left2, self.mavrik.CONTROL.RPM_left6In + 1):
             control[i] = np.clip(rpm_base + pitch_adjustment - roll_adjustment, 0, 7500)
-        for i in mid_rotors_right:
+        for i in range(self.mavrik.CONTROL.RPM_right7In, self.mavrik.CONTROL.RPM_right11 + 1):
             control[i] = np.clip(rpm_base + pitch_adjustment + roll_adjustment, 0, 7500)
                     
         # Clip control inputs
         control = self.clip_control(control)
-        return jnp.array(control)
+        return np.array(control)
 
     def step(self, action):
         action = np.clip(action, self.action_space.low, self.action_space.high)
         control = self.get_control(*action)
          
         next_state, info = self.mavrik.step(self.state, control)
-        reward = self._compute_reward(next_state)
-        self.state = next_state
+        
+        done = self._is_done(next_state)
 
-        done = self._is_done(next_state, control)
         if done < 0:
-            reward = -1
-            self.state = self.reset()
-            
+            reward = 0 #-1
+            next_state = self.reset()
+        else:    
+            reward = self._compute_reward_from_next_state(next_state)    
+
+        self.state = next_state
+ 
         return next_state, reward, done, info
 
     def reset(self, 
-              U: float = 0.0, 
-              euler: np.ndarray = np.array([0, 0.0698 + np.random.random() * np.pi/6., 0]), 
-              xned: np.array = np.array([np.random.random() - 0.5, np.random.random() - 0.5, 0]), 
-              target_altitude: Optional[np.array] = 3
+              vned: Optional[np.ndarray] = None, 
+              euler: Optional[np.ndarray] = None,
+              xned:  Optional[np.ndarray] = None,
+              target_altitude: Optional[np.array] = None
               ):
-        vned = np.array([U, 0, 0])
+        if vned is None:
+            vned = np.array([0., 0., 0.])
+        if euler is None:
+            euler = np.array([0, 0.0698, 0]) + (np.random.random([3,]) - 0.5) * np.pi/6.0 
+        if xned is None:
+            xned = np.array([0., 0., 0.]) 
+                            
         vb = self.mavrik.ned2xyz(euler, vned)
         self.state = np.array([
             *vned,  # VXe, VYe, VZe
@@ -111,38 +139,68 @@ class MavrikEnv(gym.Env):
         ])
         if target_altitude is not None:
             self.target_altitude = target_altitude
+        else:
+            self.target_altitude = 2.0
         
         return self.state
 
     def render(self, mode='human'):
         self.mavrik.render(mode)
 
-    def _compute_reward(self, state):
-        altitude = state[self.mavrik.STATE.Ze]  # Assuming the first three elements of the state are the position
-        distance = np.maximum(0, altitude - self.target_altitude)
-        square_velocity = np.sum(state[self.mavrik.STATE.VXe:self.mavrik.STATE.VXe+3]**2)
-        verticle_speed = np.abs(state[self.mavrik.STATE.VZe]).item()
-        reward = np.exp(-distance) - verticle_speed / self.max_velocity #square_velocity / (3 * self.max_velocity**2) # The closer to the target, the greater the reward (less negative)
+    def _compute_reward_from_state_control_next_state(self, state, control, next_state):
+        altitude = - state[self.mavrik.STATE.Ze]  # Assuming the first three elements of the state are the position
+        next_altitude = - next_state[self.mavrik.STATE.Ze]
+        distance = np.abs(altitude - self.target_altitude)
+        next_distance = np.abs(next_altitude - self.target_altitude)
+
+        if next_distance > distance:
+            reward = 0 
+        else:
+            reward = np.exp(1e3 * (distance - next_distance)) #square_velocity / (3 * self.max_speed**2) # The closer to the target, the greater the reward (less negative)
+        
+        return reward
+    
+    def _compute_hover_reward_from_next_state(self, next_state):
+        verticle_speed = np.abs(next_state[self.mavrik.STATE.VZe]).item()
+        reward = - verticle_speed / self.max_speed #square_velocity / (3 * self.max_velocity**2) # The closer to the target, the greater the reward (less negative)
+        return reward
+    
+    def _compute_reward_from_next_state_v1(self, next_state):
+        altitude = - next_state[self.mavrik.STATE.Ze]  # Assuming the first three elements of the state are the position
+        distance = altitude - self.target_altitude
+        square_velocity = np.sum(next_state[self.mavrik.STATE.VXe:self.mavrik.STATE.VXe+3]**2)
+        verticle_speed = np.abs(next_state[self.mavrik.STATE.VZe]).item()
+        if distance >= 0.:
+            reward = - verticle_speed
+        else:
+            reward = np.exp(distance) #square_velocity / (3 * self.max_speed**2) # The closer to the target, the greater the reward (less negative)
         
         return reward
 
-    def _is_done(self, state, control):
-        next_state, _ = self.mavrik.step(self.state, control)
-        if jnp.isnan(state).any():
-            print(f"NaN encountered in state: {next_state}. Ending episode.")
+    def _is_done(self, state):
+        if np.isnan(state).any():
+            logger.warning(f"NaN encountered in state: {state}. Ending episode.")
+            return -1
+        if False and self.mavrik.error_check(state):
+            logger.warning(f"Error in next state: {next_state}. Ending episode.")
             return -1
             
         position = state[self.mavrik.STATE.Xe:self.mavrik.STATE.Xe+3]
-        altitude = state[self.mavrik.STATE.Ze]
+        altitude = - state[self.mavrik.STATE.Ze]
         distance = np.abs(altitude - self.target_altitude)
         velocity = state[self.mavrik.STATE.VXe:self.mavrik.STATE.VXe+3]
-        speed =  np.linalg.norm(velocity)
+        max_speed =  np.abs(velocity).max()
 
-        if state[self.mavrik.STATE.Ze] > 10 or \
-            state[self.mavrik.STATE.Ze] < -200 or \
-                (state[self.mavrik.STATE.u: self.mavrik.STATE.u+3] > self.max_velocity).any():
-            print("Out of bounds. Ending episode.")
+        if altitude > self.max_altitude:
+            logger.warning(f"Altitude {altitude} >= max altitude {self.max_altitude}. Ending episode.")
             return -1
+        if altitude < self.min_altitude:
+            logger.warning(f"Altitude {altitude} <= min altitude {self.min_altitude}. Ending episode.")
+            return -1
+        if max_speed > self.max_speed:
+            logger.warning(f"Velocity {velocity} > max speed {self.max_speed}. Ending episode.")
+            return -1
+        
         return 0
         #if  distance < 1.0 and speed < 5.0:
         #    #print("Done Done Done")
@@ -150,3 +208,6 @@ class MavrikEnv(gym.Env):
         #else:
         #    return 0
          
+
+    
+ 

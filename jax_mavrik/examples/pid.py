@@ -35,54 +35,60 @@ class PIDController:
         return self.Kp * error + self.Ki * self.integral + self.Kd * derivative
 
 class MavrikPIDController:
-    def __init__(self, mavrik: Mavrik, dt: float = 0.01, pos_K: Optional[np.ndarray] = None, att_K: Optional[np.ndarray] = None):
+    def __init__(self, mavrik: Mavrik, dt: float = 0.01):
         self.mavrik = mavrik
-         
         self.dt = dt
-        
-        self.pos_K = pos_K
-        if self.pos_K is None:
-            self.pos_K = np.array([[1.0, 0.1, 0.5], [1.0, 0.1, 0.5], [1.5, 0.2, 0.6]])
-        
-        self.att_K = att_K
-        if att_K is None:
-            att_K = np.array([[1.2, 0.1, 0.4], [1.2, 0.1, 0.4], [1.5, 0.2, 0.5]])
-        
-        self.create_pid()
 
-
-    def create_pid(self):
+        self.pos_pid_x = None
+        self.pos_pid_y = None
+        self.pos_pid_z = None
+        self.att_pid_roll = None
+        self.att_pid_pitch = None
+        self.att_pid_yaw = None
+        self.thrust_xyz_min = None
+        self.thrust_xyz_max = None
+        self.target_xned = None
+        self.target_euler = None
+         
+        
+    def create_pid(self, pos_K, att_K):
         # PID controllers for ned xned (x, y, z)
-        self.pos_pid_x = PIDController(self.dt, *self.pos_K[0])
-        self.pos_pid_y = PIDController(self.dt, *self.pos_K[1])
-        self.pos_pid_z = PIDController(self.dt, *self.pos_K[2])
+        self.pos_pid_x = PIDController(self.dt, *pos_K[0])
+        self.pos_pid_y = PIDController(self.dt, *pos_K[1])
+        self.pos_pid_z = PIDController(self.dt, *pos_K[2])
 
         # PID controllers for orientation (roll, pitch, yaw)
-        self.att_pid_roll = PIDController(self.dt, *self.att_K[0])
-        self.att_pid_pitch = PIDController(self.dt, *self.att_K[1])
-        self.att_pid_yaw = PIDController(self.dt, *self.att_K[2])
+        self.att_pid_roll = PIDController(self.dt, *att_K[0])
+        self.att_pid_pitch = PIDController(self.dt, *att_K[1])
+        self.att_pid_yaw = PIDController(self.dt, *att_K[2])
 
         # Define expected thrust ranges for normalization
         self.thrust_xyz_min = np.array([-10.0, -10.0, 0.0])  # Example minimum thrust (negative for upward acceleration)
         self.thrust_xyz_max = np.array([10.0, 10.0, 10.0])   # Example maximum thrust (positive for downward acceleration)
-    
-        # State and targets
-        self.state = None
-        self.target_xned = None
-        self.target_euler = None
-
-
+     
     def reset(self, 
-              U: float = 30.0, 
-              euler: np.ndarray = np.array([0, 0.0698, 0]), 
-              xned: np.array = np.array([0, 0, 0]), 
-              target_xned: Optional[np.array] = None,
-              target_euler: Optional[np.array] = None):
-        self.create_pid()
+            U: float = 30.0, 
+            euler: np.ndarray = np.array([0, 0.0698, 0]), 
+            xned: np.array = np.array([0, 0, 0]), 
+            target_xned: Optional[np.array] = None,
+            target_euler: Optional[np.array] = None,
+            pos_K: Optional[np.array] = None,
+            att_K: Optional[np.array] = None
+    ):
+        if pos_K is None:
+            pos_K = np.array([[1.0, 0.1, 0.5], [1.0, 0.1, 0.5], [1.5, 0.2, 0.6]]) + np.random.random([3, 3]) * 2
+        
+        if att_K is None:
+            att_K = np.array([[1.2, 0.1, 0.4], [1.2, 0.1, 0.4], [1.5, 0.2, 0.5]]) + np.random.random([3, 3]) * 2
+        
+        self.create_pid(
+            pos_K = pos_K,
+            att_K = att_K,
+        )
 
         vned = np.array([U, 0, 0])
         vb = self.mavrik.ned2xyz(euler, vned)
-        self.state = np.array([
+        state = np.array([
             *vned,  # VXe, VYe, VZe
             *xned,   # Xe Ye Ze
             *vb,   # u v w
@@ -91,11 +97,16 @@ class MavrikPIDController:
             0.0, 0.0, 0.0,   # Fx, Fy, Fz
             0.0, 0.0, 0.0    # L, M, N
         ])
+
+        self.target_xned = target_xned
         if target_xned is not None:
-            self.target_xned = target_xned
+            self.target_xned = np.array([0, 0, np.random.uniform(-10, -5)])
+        
+        self.target_euler = target_euler
         if target_euler is not None:
-            self.target_euler = target_euler
-        return self.state
+            self.target_euler = np.array([0, 0, 0])
+
+        return state
 
     def normalize_thrust(self, *thrust_xyz):
         """
@@ -163,18 +174,12 @@ class MavrikPIDController:
         roll_adjustment = roll_control * 100  # Example scaling for roll
         yaw_adjustment = yaw_control * 100  # Example scaling for yaw
 
-        # Adjust RPMs for pitch (front and rear rotors)
-        control[self.mavrik.CONTROL.RPM_leftOut1] = np.clip(rpm_base - pitch_adjustment, 0, 7500)  # Front left
-        control[self.mavrik.CONTROL.RPM_left6In] = np.clip(rpm_base + pitch_adjustment, 0, 7500)  # Rear left
-        control[self.mavrik.CONTROL.RPM_right7In] = np.clip(rpm_base + pitch_adjustment, 0, 7500)  # Rear right
-        control[self.mavrik.CONTROL.RPM_right12Out] = np.clip(rpm_base - pitch_adjustment, 0, 7500)  # Front right
-
-        # Adjust RPMs for roll (left and right rotors)
-        control[self.mavrik.CONTROL.RPM_leftOut1] += np.clip(roll_adjustment, 0, 7500)
-        control[self.mavrik.CONTROL.RPM_left6In] += np.clip(roll_adjustment, 0, 7500)
-        control[self.mavrik.CONTROL.RPM_right7In] -= np.clip(roll_adjustment, 0, 7500)
-        control[self.mavrik.CONTROL.RPM_right12Out] -= np.clip(roll_adjustment, -7500, 7500)
-
+        # Adjust RPMs for pitch (front and rear rotors), roll (left and right rotors)
+        control[self.mavrik.CONTROL.RPM_leftOut1] = np.clip(rpm_base - pitch_adjustment + roll_adjustment, 0, 7500)  # Front left
+        control[self.mavrik.CONTROL.RPM_left6In] = np.clip(rpm_base + pitch_adjustment + roll_adjustment, 0, 7500)  # Rear left
+        control[self.mavrik.CONTROL.RPM_right7In] = np.clip(rpm_base + pitch_adjustment - roll_adjustment, 0, 7500)  # Rear right
+        control[self.mavrik.CONTROL.RPM_right12Out] = np.clip(rpm_base - pitch_adjustment - roll_adjustment, 0, 7500)  # Front right
+ 
         # Adjust RPMs for yaw (tail rotors)
         control[self.mavrik.CONTROL.RPM_tailLeft] = np.clip(rpm_base + yaw_adjustment, 0, 7500)
         control[self.mavrik.CONTROL.RPM_tailRight] = np.clip(rpm_base - yaw_adjustment, 0, 7500)
@@ -193,7 +198,7 @@ class MavrikPIDController:
 
 
 
-def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, max_steps=100, run_name=''):
+def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, pos_K, att_K, max_steps=100, run_name=''):
     assert len(initial_conditions) == len(target_conditions), \
         f"Number of initial and target conditions do not match: {len(initial_conditions)=} vs. {len(target_conditions)=}"
 
@@ -205,29 +210,60 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
             print(f"Collected {len(trajectories)} trajectories")
         U, euler, xned = initial_condition['U'], initial_condition['euler'], initial_condition['xned']
         target_xned, target_euler = target_condition['xned'], target_condition['euler']
-        state = pid_controller.reset(U=U, euler=euler, xned=xned, target_xned=target_xned, target_euler=target_euler)
+        state = pid_controller.reset(U=U, euler=euler, xned=xned, target_xned=target_xned, target_euler=target_euler, pos_K = pos_K, att_K = att_K)
         trajectory = {'state': [], 'control': []}
 
-        for _ in range(max_steps):
+         
+        for step in range(max_steps):
             if np.isnan(state).any() or \
                 state[pid_controller.mavrik.STATE.Ze] > 10 or \
-                    state[pid_controller.mavrik.STATE.Ze] < -200 or \
-                        (state[pid_controller.mavrik.STATE.u: pid_controller.mavrik.STATE.u+3] > 100).any():
+                    np.abs(state[pid_controller.mavrik.STATE.Ze]) > 1e6 or \
+                        (np.abs(state[pid_controller.mavrik.STATE.u: pid_controller.mavrik.STATE.u+3]) > 1e6).any() or \
+                            pid_controller.mavrik.error_check(state):
+                #input()
                 break
             
             control = pid_controller.get_control(state)
+            if False:
+                control = np.array([
+                    0.0, 0.0, 0.0,  # wing_tilt, tail_tilt, aileron
+                    0.0, 0.0, 0.0,  # elevator, flap, rudder
+                    7500.0, 7500.0,  # RPM_tailLeft, RPM_tailRight
+                    7500.0, 7500.0,  # RPM_leftOut1, RPM_left2
+                    7500.0, 7500.0,  # RPM_left3, RPM_left4
+                    7500.0, 7500.0,  # RPM_left5, RPM_left6In
+                    7500.0, 7500.0,  # RPM_right7In, RPM_right8
+                    7500.0, 7500.0,  # RPM_right9, RPM_right10
+                    7500.0, 7500.0   # RPM_right11, RPM_right12Out
+                ])
+                
             if np.isnan(control).any():
                 break
             
             trajectory['state'].append(state)  # (altitude, pitch angle)
             trajectory['control'].append(control)
+
+            if False: #True:
+                print(f">>>>>>>>>>>>>>>>>>>> Step: {step} <<<<<<<<<<<<<<<<<<<<<<") 
+                vned = state[pid_controller.mavrik.STATE.VXe:pid_controller.mavrik.STATE.VXe+3]
+                print(f"Vned: {vned}")# | Expected Vned: {expected_vned[i]} | Error: {np.linalg.norm(vned - expected_vned[i])}")
+                xned = state[pid_controller.mavrik.STATE.Xe:pid_controller.mavrik.STATE.Xe+3]
+                print(f"Xned: {xned}")# | Expected Xned: {expected_xned[i]} | Error: {np.linalg.norm(xned - expected_xned[i])}")
+                vb = state[pid_controller.mavrik.STATE.u:pid_controller.mavrik.STATE.u+3]
+                print(f"Vb: {vb}")# | Expected Vb: {expected_vb[i]} | Error: {np.linalg.norm(vb - expected_vb[i])}")
+                euler = state[pid_controller.mavrik.STATE.roll:pid_controller.mavrik.STATE.roll+3]
+                print(f"Euler: {euler}")# | Expected Euler: {expected_euler[i]} | Error: {np.linalg.norm(euler - expected_euler[i])}")
+                pqr = state[pid_controller.mavrik.STATE.p:pid_controller.mavrik.STATE.p+3]
+                print(f"PQR: {pqr}")
+                forces = state[pid_controller.mavrik.STATE.Fx:pid_controller.mavrik.STATE.Fx+3]
+                print(f"Forces: {forces}")
+                moments = state[pid_controller.mavrik.STATE.L:pid_controller.mavrik.STATE.L+3]
+                print(f"Moments: {moments}")
             
             state, _ = pid_controller.mavrik.step(state, control)
                                    
         trajectories.append(trajectory)
-
-    
-    
+     
 
     # Save trajectories to a pickle file
     trajectory_dir = os.path.join(current_dir, 'data')
@@ -264,9 +300,9 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
         plt.ylabel('Speed')
 
         plt.subplot(3, 1, 3)
-        plt.plot(altitudes, velocities[:, -1], color='r')
-        plt.scatter(altitudes[0], velocities[0][-1], color='green', s=50)
-        plt.scatter(altitudes[-1], velocities[-1][-1], color='black', s=50)
+        plt.plot(altitudes, -velocities[:, -1], color='r')
+        plt.scatter(altitudes[0], -velocities[0][-1], color='green', s=50)
+        plt.scatter(altitudes[-1], -velocities[-1][-1], color='black', s=50)
         plt.xlabel('Altitude')
         plt.ylabel('Vertical Velocity')
 
@@ -278,15 +314,17 @@ def run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_con
     plt.savefig(f'{plot_dir}/{run_name}.png')
  
     return run_name
+
+
     
 # Example usage
 if __name__ == "__main__":
     # Ensure PID runs on CPU
-    pid_controller = MavrikPIDController(Mavrik(), pos_K = np.random.random([3, 3]) * 2, att_K = np.random.random([3, 3])  * 2, dt=0.01)
+    pid_controller = MavrikPIDController(Mavrik(), dt=0.01)
     data_path = os.path.join(current_dir, 'data')
 
     for max_steps in [10000]: #10, 100, 500, 1000]:
-        for num_trajs in [100]: #, 100, 500, 1000]:
+        for num_trajs in [10]: #, 100, 500, 1000]:
             initial_conditions = [
                 #{'U': 30, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, np.random.uniform(-100, -50)])}
                 {'U': 0, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, 0])}
@@ -294,11 +332,14 @@ if __name__ == "__main__":
             ]
             target_conditions = [
                 #{'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, 0])}
-                {'U': 0, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, np.random.uniform(-100, -50)])}
+                {'U': 0, 'euler': np.array([0, 0.0698, 0]), 'xned': np.array([0, 0, -20])} #np.random.uniform(-10, -5)])}
                 for i in range(num_trajs)
             ]
+            pos_K = np.array([[1.0, 0.1, 0.5], [1.0, 0.1, 0.5], [1.5, 0.2, 0.6]]) # + np.random.random([3, 3]) * 2
+            att_K = np.array([[1.2, 0.1, 0.4], [1.2, 0.1, 0.4], [1.5, 0.2, 0.5]]) #+ np.random.random([3, 3]) * 2
 
-            run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, max_steps=max_steps, run_name = 'hover')
+
+            run_pid_and_plot_trajectories(pid_controller, initial_conditions, target_conditions, pos_K, att_K, max_steps=max_steps, run_name = 'hover')
 
     # Ensure SystemID runs on GPU
     system_id = SystemID()

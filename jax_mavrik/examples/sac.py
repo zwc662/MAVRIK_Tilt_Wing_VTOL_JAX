@@ -12,9 +12,41 @@ import os
 import pickle
 
 import datetime
+import logging
 
 import matplotlib.pyplot as plt
 
+# Set up logger
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)  # Default level
+
+# Create console handler and set level to debug
+ch = logging.StreamHandler()
+ch.setLevel(logging.DEBUG)
+
+# Create formatter
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s - Line: %(lineno)d')
+
+# Add formatter to ch
+ch.setFormatter(formatter)
+
+# Add ch to logger
+logger.addHandler(ch)
+
+def set_logging_level(level: str):
+    level = level.upper()
+    if level == 'DEBUG':
+        logger.setLevel(logging.DEBUG)
+    elif level == 'INFO':
+        logger.setLevel(logging.INFO)
+    elif level == 'WARNING':
+        logger.setLevel(logging.WARNING)
+    elif level == 'ERROR':
+        logger.setLevel(logging.ERROR)
+    elif level == 'CRITICAL':
+        logger.setLevel(logging.CRITICAL)
+    else:
+        raise ValueError(f"Unknown logging level: {level}")
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 
@@ -28,12 +60,17 @@ class Actor(nn.Module):
     def setup(self):
         self.dense1 = nn.Dense(256)
         self.dense2 = nn.Dense(256)
-        self.dense3 = nn.Dense(self.action_dim)
+        self.mean_layer = nn.Dense(self.action_dim)
+        self.log_std_layer = nn.Dense(self.action_dim)
 
     def __call__(self, x):
         x = nn.relu(self.dense1(x))
         x = nn.relu(self.dense2(x))
-        return nn.tanh(self.dense3(x))
+        mean = jnp.tanh(self.mean_layer(x))
+        log_std = self.log_std_layer(x)
+        log_std = jnp.clip(log_std, -20, 2)  # Clipping log_std to prevent numerical issues
+        std = jnp.exp(log_std)
+        return mean, std
 
 class Critic(nn.Module):
     def setup(self):
@@ -74,14 +111,16 @@ class SAC:
         self.target_critic2_state = self.critic2_state
 
     def select_action(self, state):
-        action = self.actor.apply(self.actor_state.params, state)
-        return action
+        mean, std = self.actor.apply(self.actor_state.params, state)
+        action = mean + std * jax.random.normal(jax.random.PRNGKey(0), mean.shape)
+        action = jnp.tanh(action)  # Squash the action into [-1, 1]
+        return mean #action
 
     def update(self, state, action, reward, next_state, done):
         def critic_loss_fn(params, state, action, reward, next_state, done):
             q1 = self.critic1.apply(params, state, action)
             q2 = self.critic2.apply(params, state, action)
-            next_action = self.actor.apply(self.actor_state.params, next_state)
+            next_action = self.select_action(next_state)
             next_q1 = self.target_critic1.apply(self.target_critic1_state.params, next_state, next_action)
             next_q2 = self.target_critic2.apply(self.target_critic2_state.params, next_state, next_action)
             next_q = jnp.minimum(next_q1, next_q2)
@@ -91,7 +130,9 @@ class SAC:
             return loss1 + loss2, (q1, q2, next_q, target_q)
         
         def actor_loss_fn(params, state):
-            action = self.actor.apply(params, state)
+            mean, std = self.actor.apply(params, state)
+            action = mean + std * jax.random.normal(jax.random.PRNGKey(0), mean.shape)
+            action = jnp.tanh(action)  # Squash the action into [-1, 1]
             q1 = self.critic1.apply(self.critic1_state.params, state, action)
             q2 = self.critic2.apply(self.critic2_state.params, state, action)
             q = jnp.minimum(q1, q2)
@@ -121,14 +162,19 @@ def run(max_steps = 1000, num_episodes = 1_000_000_000):
         done = 1
         episode_reward = 0
         steps = 0
-        while done >= 0 and steps <= max_steps:
+        while steps <= max_steps:
             action = sac.select_action(state)
             next_state, reward, done, _ = env.step(action)
-            sac.update(state, action, reward, next_state, done)
+            if done < 0:
+                sac.update(state, action, reward, state, done)
+                break
+            else:
+                sac.update(state, action, reward, next_state, done)
+
             state = next_state
             episode_reward += reward
             steps += 1
-        print(f"Episode: {episode}, Reward: {episode_reward}, Done: {done}")
+        logger.info(f"Episode: {episode}, Reward: {episode_reward}, Done: {done}")
 
         if episode % 20 == 0:
             trajectories = []
@@ -138,20 +184,24 @@ def run(max_steps = 1000, num_episodes = 1_000_000_000):
                 done = 1
                 trajectory = {'state': [], 'action': [], 'reward': []}
                 total_reward = 0
-                while done >= 0 and steps <= max_steps:
+                steps = 0
+                while steps <= max_steps:
                     action = sac.select_action(state)
                     next_state, reward, done, _ = env.step(action)
-                    sac.update(state, action, reward, next_state, done)
                     trajectory['state'].append(state)
                     trajectory['action'].append(action)
                     trajectory['reward'].append(reward)
-                    state = next_state
                     total_reward += reward
+                    if done < 0:
+                        break
+                    else:
+                        state = next_state
+                    steps += 1
                 trajectories.append(trajectory)
             
             # Compute average total reward
             average_total_reward = np.mean([sum(t['reward']) for t in trajectories])
-            print(f"Average Total Reward: {average_total_reward}")
+            logger.info(f"Average Total Reward: {average_total_reward}")
 
             # Save trajectories to a pickle file
             trajectory_dir = os.path.join(current_dir, 'data')
@@ -213,4 +263,6 @@ def run(max_steps = 1000, num_episodes = 1_000_000_000):
                 pickle.dump(sac.target_critic2_state.params, f)
                 
 if __name__ == "__main__":
+    # Example usage
+    set_logging_level('DEBUG')
     run()
