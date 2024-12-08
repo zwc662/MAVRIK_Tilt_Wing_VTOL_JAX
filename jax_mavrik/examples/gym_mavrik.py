@@ -105,10 +105,9 @@ class MavrikEnv(gym.Env):
         done = self._is_done(next_state)
 
         if done < 0:
-            reward = 0 #-1
-            next_state = self.reset()
+            reward = -1
         else:    
-            reward = self._compute_reward_from_next_state(next_state)    
+            reward = self._compute_climbing_reward_from_next_state(next_state)    
 
         self.state = next_state
  
@@ -165,16 +164,10 @@ class MavrikEnv(gym.Env):
         reward = - verticle_speed / self.max_speed #square_velocity / (3 * self.max_velocity**2) # The closer to the target, the greater the reward (less negative)
         return reward
     
-    def _compute_reward_from_next_state_v1(self, next_state):
+    def _compute_climbing_reward_from_next_state(self, next_state):
         altitude = - next_state[self.mavrik.STATE.Ze]  # Assuming the first three elements of the state are the position
         distance = altitude - self.target_altitude
-        square_velocity = np.sum(next_state[self.mavrik.STATE.VXe:self.mavrik.STATE.VXe+3]**2)
-        verticle_speed = np.abs(next_state[self.mavrik.STATE.VZe]).item()
-        if distance >= 0.:
-            reward = - verticle_speed
-        else:
-            reward = np.exp(distance) #square_velocity / (3 * self.max_speed**2) # The closer to the target, the greater the reward (less negative)
-        
+        reward =  np.exp(- np.abs(distance)) #square_velocity / (3 * self.max_speed**2) # The closer to the target, the greater the reward (less negative)
         return reward
 
     def _is_done(self, state):

@@ -114,7 +114,7 @@ class SAC:
         mean, std = self.actor.apply(self.actor_state.params, state)
         action = mean + std * jax.random.normal(jax.random.PRNGKey(0), mean.shape)
         action = jnp.tanh(action)  # Squash the action into [-1, 1]
-        return mean #action
+        return action
 
     def update(self, state, action, reward, next_state, done):
         def critic_loss_fn(params, state, action, reward, next_state, done):
@@ -165,6 +165,8 @@ def run(max_steps = 1000, num_episodes = 1_000_000_000):
         while steps <= max_steps:
             action = sac.select_action(state)
             next_state, reward, done, _ = env.step(action)
+            episode_reward += reward
+
             if done < 0:
                 sac.update(state, action, reward, state, done)
                 break
@@ -172,7 +174,6 @@ def run(max_steps = 1000, num_episodes = 1_000_000_000):
                 sac.update(state, action, reward, next_state, done)
 
             state = next_state
-            episode_reward += reward
             steps += 1
         logger.info(f"Episode: {episode}, Reward: {episode_reward}, Done: {done}")
 
